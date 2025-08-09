@@ -15,6 +15,21 @@ interface Level {
   subtopic_id: string;
 }
 
+// Helper function to parse levels response
+const parseLevelsResponse = (levelsResponse: any): Level[] => {
+  let levelsData = [];
+  if (levelsResponse?.data && Array.isArray(levelsResponse.data)) {
+    levelsData = levelsResponse.data;
+  } else if (levelsResponse?.items && Array.isArray(levelsResponse.items)) {
+    levelsData = levelsResponse.items;
+  } else if (levelsResponse?.levels && Array.isArray(levelsResponse.levels)) {
+    levelsData = levelsResponse.levels;
+  } else if (Array.isArray(levelsResponse)) {
+    levelsData = levelsResponse;
+  }
+  return levelsData;
+};
+
 export default function QuestionsPage() {
   const searchParams = useSearchParams();
   const urlTopic = searchParams?.get('topic');
@@ -164,18 +179,8 @@ export default function QuestionsPage() {
         
         const levelsResponse = await apiService.get(levelsUrl);
         
-        // Ensure we always get an array
-        let levelsData = [];
-        if (levelsResponse?.data && Array.isArray(levelsResponse.data)) {
-          levelsData = levelsResponse.data;
-        } else if (levelsResponse?.items && Array.isArray(levelsResponse.items)) {
-          levelsData = levelsResponse.items;
-        } else if (levelsResponse?.levels && Array.isArray(levelsResponse.levels)) {
-          levelsData = levelsResponse.levels;
-        } else if (Array.isArray(levelsResponse)) {
-          levelsData = levelsResponse;
-        }
-        
+        // Use helper function to parse response
+        const levelsData = parseLevelsResponse(levelsResponse);
         setLevels(levelsData);
       } catch (error) {
         console.error('Error loading levels:', error);
@@ -332,11 +337,16 @@ export default function QuestionsPage() {
               disabled={!selectedSubtopic}
             >
               <option value="">All Levels</option>
-              {Array.isArray(levels) && levels.map(level => (
-                <option key={level.id} value={level.level.toString()}>
-                  Level {level.level} - {level.name}
-                </option>
-              ))}
+              {Array.isArray(levels) && levels
+                .filter((level, index, self) => 
+                  index === self.findIndex(l => l.level === level.level)
+                )
+                .sort((a, b) => a.level - b.level)
+                .map(level => (
+                  <option key={level.id} value={level.level.toString()}>
+                    Level {level.level} - {level.name}
+                  </option>
+                ))}
             </select>
 
             <div className="text-sm text-gray-600 flex items-center">
@@ -644,17 +654,9 @@ function QuestionModal({ isOpen, onClose, onSave, title, topics, subtopics, ques
       if (subtopicId) {
         try {
           const levelsResponse = await apiService.get(`/admin/levels?subtopicId=${subtopicId}`);
-          // Handle different response formats
-          let levelsData = [];
-          if (levelsResponse?.data && Array.isArray(levelsResponse.data)) {
-            levelsData = levelsResponse.data;
-          } else if (levelsResponse?.items && Array.isArray(levelsResponse.items)) {
-            levelsData = levelsResponse.items;
-          } else if (levelsResponse?.levels && Array.isArray(levelsResponse.levels)) {
-            levelsData = levelsResponse.levels;
-          } else if (Array.isArray(levelsResponse)) {
-            levelsData = levelsResponse;
-          }
+          
+          // Use helper function to parse response
+          const levelsData = parseLevelsResponse(levelsResponse);
           setLevels(levelsData);
           
           // If editing a question with level_id, set it after levels are loaded

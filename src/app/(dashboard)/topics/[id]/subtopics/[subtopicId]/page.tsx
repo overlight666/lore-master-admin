@@ -66,17 +66,45 @@ export default function SubtopicQuestionsPage() {
   const [topic, setTopic] = useState<Topic | null>(null);
   const [subtopic, setSubtopic] = useState<Subtopic | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
+  const [filteredQuestions, setFilteredQuestions] = useState<Question[]>([]);
   const [levels, setLevels] = useState<Level[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showBulkImportModal, setShowBulkImportModal] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
+  const [selectedLevel, setSelectedLevel] = useState<number | null>(null);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [questionsPerPage] = useState(20);
+  
+  // Calculate pagination for filtered questions
+  const indexOfLastQuestion = currentPage * questionsPerPage;
+  const indexOfFirstQuestion = indexOfLastQuestion - questionsPerPage;
+  const currentQuestions = filteredQuestions.slice(indexOfFirstQuestion, indexOfLastQuestion);
+  const totalPages = Math.ceil(filteredQuestions.length / questionsPerPage);
 
   useEffect(() => {
     if (topicId && subtopicId) {
       loadData();
     }
   }, [topicId, subtopicId]);
+
+  // Filter questions when filter changes or questions update
+  useEffect(() => {
+    if (selectedLevel === null) {
+      setFilteredQuestions(questions);
+    } else {
+      const filtered = questions.filter(question => {
+        // Extract level number from level_id (format: "level_1", "level_2", etc.)
+        const levelNumber = question.level_id ? parseInt(question.level_id.split('_')[1]) : 1;
+        return levelNumber === selectedLevel;
+      });
+      setFilteredQuestions(filtered);
+    }
+    // Reset pagination when filter changes
+    setCurrentPage(1);
+  }, [questions, selectedLevel]);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -143,8 +171,10 @@ export default function SubtopicQuestionsPage() {
 
     console.log(`Finished loading all questions. Total: ${allQuestions.length}`);
     return allQuestions;
-  };  // Group questions by level
-  const questionsByLevel = questions.reduce((acc, question) => {
+  };
+
+  // Group current page questions by level
+  const questionsByLevel = currentQuestions.reduce((acc, question) => {
     const level = question.level || 1;
     if (!acc[level]) {
       acc[level] = [];
@@ -220,7 +250,26 @@ export default function SubtopicQuestionsPage() {
             </div>
           </div>
 
-          <div className="flex space-x-3">
+          <div className="flex items-center space-x-3">
+            {/* Level Filter */}
+            <select
+              value={selectedLevel || ''}
+              onChange={(e) => setSelectedLevel(e.target.value ? parseInt(e.target.value) : null)}
+              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All Levels</option>
+              {levels
+                .filter((level, index, self) => 
+                  index === self.findIndex(l => l.level === level.level)
+                )
+                .sort((a, b) => a.level - b.level)
+                .map((level) => (
+                  <option key={level.id} value={level.level}>
+                    Level {level.level}
+                  </option>
+                ))}
+            </select>
+
             <button
               onClick={() => setShowBulkImportModal(true)}
               className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
@@ -247,8 +296,13 @@ export default function SubtopicQuestionsPage() {
             <div className="flex items-center">
               <Target className="h-8 w-8 text-blue-500" />
               <div className="ml-3">
-                <p className="text-sm font-medium text-gray-500">Total Questions</p>
-                <p className="text-2xl font-bold text-gray-900">{questions.length}</p>
+                <p className="text-sm font-medium text-gray-500">
+                  {selectedLevel ? `Level ${selectedLevel} Questions` : 'Total Questions'}
+                </p>
+                <p className="text-2xl font-bold text-gray-900">{filteredQuestions.length}</p>
+                {selectedLevel && (
+                  <p className="text-xs text-gray-400">of {questions.length} total</p>
+                )}
               </div>
             </div>
           </div>
@@ -260,7 +314,7 @@ export default function SubtopicQuestionsPage() {
               <div className="ml-3">
                 <p className="text-sm font-medium text-gray-500">Easy</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {questions.filter(q => getDifficultyFromLevel(q.level) === 'easy').length}
+                  {filteredQuestions.filter(q => getDifficultyFromLevel(q.level) === 'easy').length}
                 </p>
               </div>
             </div>
@@ -273,7 +327,7 @@ export default function SubtopicQuestionsPage() {
               <div className="ml-3">
                 <p className="text-sm font-medium text-gray-500">Medium</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {questions.filter(q => getDifficultyFromLevel(q.level) === 'medium').length}
+                  {filteredQuestions.filter(q => getDifficultyFromLevel(q.level) === 'medium').length}
                 </p>
               </div>
             </div>
@@ -286,7 +340,7 @@ export default function SubtopicQuestionsPage() {
               <div className="ml-3">
                 <p className="text-sm font-medium text-gray-500">Hard</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {questions.filter(q => getDifficultyFromLevel(q.level) === 'hard').length}
+                  {filteredQuestions.filter(q => getDifficultyFromLevel(q.level) === 'hard').length}
                 </p>
               </div>
             </div>
@@ -386,6 +440,97 @@ export default function SubtopicQuestionsPage() {
               ))
           )}
         </div>
+
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="bg-white px-4 py-3 border-t border-gray-200 sm:px-6">
+            <div className="flex items-center justify-between">
+              <div className="flex-1 flex justify-between sm:hidden">
+                <button
+                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                  disabled={currentPage === 1}
+                  className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                  disabled={currentPage === totalPages}
+                  className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+              </div>
+              <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm text-gray-700">
+                    Showing <span className="font-medium">{indexOfFirstQuestion + 1}</span> to{' '}
+                    <span className="font-medium">
+                      {Math.min(indexOfLastQuestion, filteredQuestions.length)}
+                    </span>{' '}
+                    of <span className="font-medium">{filteredQuestions.length}</span> questions
+                    {selectedLevel && (
+                      <span className="text-gray-500"> (Level {selectedLevel} filtered)</span>
+                    )}
+                  </p>
+                </div>
+                <div>
+                  <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                    <button
+                      onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                      disabled={currentPage === 1}
+                      className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <span className="sr-only">Previous</span>
+                      <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                        <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    </button>
+                    
+                    {/* Page numbers */}
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, index) => {
+                      let pageNumber;
+                      if (totalPages <= 5) {
+                        pageNumber = index + 1;
+                      } else if (currentPage <= 3) {
+                        pageNumber = index + 1;
+                      } else if (currentPage >= totalPages - 2) {
+                        pageNumber = totalPages - 4 + index;
+                      } else {
+                        pageNumber = currentPage - 2 + index;
+                      }
+                      
+                      return (
+                        <button
+                          key={pageNumber}
+                          onClick={() => setCurrentPage(pageNumber)}
+                          className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
+                            pageNumber === currentPage
+                              ? 'z-10 bg-blue-50 border-blue-500 text-blue-600'
+                              : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
+                          }`}
+                        >
+                          {pageNumber}
+                        </button>
+                      );
+                    })}
+                    
+                    <button
+                      onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                      disabled={currentPage === totalPages}
+                      className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <span className="sr-only">Next</span>
+                      <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                        <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                      </svg>
+                    </button>
+                  </nav>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Add/Edit Question Modal */}
