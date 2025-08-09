@@ -1,0 +1,965 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import AdminLayout from '@/components  const downloadExcelTemplate = () => {
+    // Create a sample Excel template
+    const template = [
+      {
+        level: 1,
+        question: "Sample question here?",
+        option_a: "First option",
+        option_b: "Second option", 
+        option_c: "Third option",
+        option_d: "Fourth option",
+        correct_answer: "A",
+        explanation: "Explanation for the correct answer"
+      },
+      {
+        level: 2,
+        question: "Another sample question?",
+        option_a: "Option A",
+        option_b: "Option B",
+        option_c: "Option C", 
+        option_d: "Option D",
+        correct_answer: "B",
+        explanation: "Why this answer is correct"
+      }
+    ];
+
+    // Convert to CSV
+    const headers = Object.keys(template[0]);
+    const csvContent = [
+      headers.join(','),
+      ...template.map(row => 
+        headers.map(header => `"${row[header as keyof typeof row]}"`).join(',')
+      )
+    ].join('
+');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'questions_template.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  };inLayout';
+import { ArrowLeft, Plus, Download, Upload, FileSpreadsheet, Edit, Trash2, Target } from 'lucide-react';
+import { apiService } from '@/services/apiService';
+import toast from 'react-hot-toast';
+
+interface Question {
+  id: string;
+  question: string;
+  options: string[];
+  correctAnswer: number;
+  explanation?: string;
+  difficulty: string;
+  level: number;
+  topic_id: string;
+  subtopic_id: string;
+  level_id?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface Level {
+  id: string;
+  level: number;
+  name: string;
+  description: string;
+  subtopic_id: string;
+  topic_id: string;
+}
+
+interface Topic {
+  id: string;
+  name: string;
+}
+
+interface Subtopic {
+  id: string;
+  name: string;
+  description: string;
+  topic_id: string;
+}
+
+export default function SubtopicQuestionsPage() {
+  const params = useParams();
+  const router = useRouter();
+  const topicId = params.id as string;
+  const subtopicId = params.subtopicId as string;
+  
+  const [topic, setTopic] = useState<Topic | null>(null);
+  const [subtopic, setSubtopic] = useState<Subtopic | null>(null);
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [levels, setLevels] = useState<Level[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showBulkImportModal, setShowBulkImportModal] = useState(false);
+  const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
+  const [selectedLevel, setSelectedLevel] = useState('');
+
+  useEffect(() => {
+    if (topicId && subtopicId) {
+      loadData();
+    }
+  }, [topicId, subtopicId]);
+
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      const [topicData, subtopicData, questionsData, levelsData] = await Promise.all([
+        apiService.get(`/admin/topics/${topicId}`),
+        apiService.get(`/admin/subtopics/${subtopicId}`),
+        apiService.get(`/admin/questions?subtopicId=${subtopicId}`),
+        apiService.get(`/admin/levels?subtopicId=${subtopicId}`)
+      ]);
+      
+      setTopic(topicData?.topic || topicData);
+      setSubtopic(subtopicData?.subtopic || subtopicData);
+      
+      // Handle questions data
+      const questionsArray = questionsData?.data || questionsData?.items || questionsData || [];
+      setQuestions(Array.isArray(questionsArray) ? questionsArray : []);
+      
+      // Handle levels data
+      const levelsArray = levelsData?.data || levelsData?.items || levelsData || [];
+      setLevels(Array.isArray(levelsArray) ? levelsArray : []);
+      
+    } catch (error: any) {
+      console.error('Error loading data:', error);
+      toast.error('Failed to load data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Group questions by level
+  const questionsByLevel = questions.reduce((acc, question) => {
+    const level = question.level || 1;
+    if (!acc[level]) {
+      acc[level] = [];
+    }
+    acc[level].push(question);
+    return acc;
+  }, {} as { [key: number]: Question[] });
+
+  const handleDeleteQuestion = async (questionId: string) => {
+    if (!confirm('Are you sure you want to delete this question?')) {
+      return;
+    }
+
+    try {
+      await apiService.delete(`/admin/questions/${questionId}`);
+      toast.success('Question deleted successfully');
+      loadData();
+    } catch (error: any) {
+      console.error('Error deleting question:', error);
+      toast.error('Failed to delete question');
+    }
+  };
+
+  const handleEditQuestion = (question: Question) => {
+    setEditingQuestion(question);
+    setShowAddModal(true);
+  };
+
+  const downloadExcelTemplate = () => {
+    // Create a sample Excel template
+    const template = [
+      {
+        level: 1,
+        question: "Sample question here?",
+        option_a: "First option",
+        option_b: "Second option", 
+        option_c: "Third option",
+        option_d: "Fourth option",
+        correct_answer: "A",
+        explanation: "Explanation for the correct answer",
+        difficulty: "easy"
+      },
+      {
+        level: 2,
+        question: "Another sample question?",
+        option_a: "Option A",
+        option_b: "Option B",
+        option_c: "Option C", 
+        option_d: "Option D",
+        correct_answer: "B",
+        explanation: "Why this answer is correct",
+        difficulty: "medium"
+      }
+    ];
+
+    // Convert to CSV for simple download
+    const headers = Object.keys(template[0]).join(',');
+    const rows = template.map(row => Object.values(row).join(','));
+    const csvContent = [headers, ...rows].join('\\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `questions_template_${subtopic?.name || 'subtopic'}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  if (isLoading) {
+    return (
+      <AdminLayout>
+        <div className="animate-pulse space-y-4">
+          <div className="h-8 bg-gray-200 rounded w-1/4"></div>
+          <div className="h-32 bg-gray-200 rounded"></div>
+        </div>
+      </AdminLayout>
+    );
+  }
+
+  if (!topic || !subtopic) {
+    return (
+      <AdminLayout>
+        <div className="text-center py-12">
+          <p className="text-gray-500">Topic or subtopic not found</p>
+        </div>
+      </AdminLayout>
+    );
+  }
+
+  return (
+    <AdminLayout>
+      <div className="space-y-6">
+        {/* Header */}
+        <div>
+          <button
+            onClick={() => router.push(`/topics/${topicId}`)}
+            className="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 mb-4"
+          >
+            <ArrowLeft className="h-4 w-4 mr-1" />
+            Back to {topic.name}
+          </button>
+          
+          <div className="flex justify-between items-start">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">
+                {subtopic.name} - Questions
+              </h1>
+              <p className="mt-1 text-sm text-gray-600">{subtopic.description}</p>
+            </div>
+            
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={downloadExcelTemplate}
+                className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Download Template
+              </button>
+              
+              <button
+                onClick={() => setShowBulkImportModal(true)}
+                className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                Bulk Import
+              </button>
+              
+              <button
+                onClick={() => {
+                  setEditingQuestion(null);
+                  setShowAddModal(true);
+                }}
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Question
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Statistics */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-white overflow-hidden shadow rounded-lg">
+            <div className="p-5">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <Target className="h-6 w-6 text-blue-600" />
+                </div>
+                <div className="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt className="text-sm font-medium text-gray-500 truncate">
+                      Total Questions
+                    </dt>
+                    <dd className="text-lg font-medium text-gray-900">
+                      {questions.length}
+                    </dd>
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white overflow-hidden shadow rounded-lg">
+            <div className="p-5">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <div className="h-6 w-6 rounded-full bg-green-100 flex items-center justify-center">
+                    <span className="text-xs font-medium text-green-600">E</span>
+                  </div>
+                </div>
+                <div className="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt className="text-sm font-medium text-gray-500 truncate">
+                      Easy
+                    </dt>
+                    <dd className="text-lg font-medium text-gray-900">
+                      {questions.filter(q => q.difficulty === 'easy').length}
+                    </dd>
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white overflow-hidden shadow rounded-lg">
+            <div className="p-5">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <div className="h-6 w-6 rounded-full bg-yellow-100 flex items-center justify-center">
+                    <span className="text-xs font-medium text-yellow-600">M</span>
+                  </div>
+                </div>
+                <div className="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt className="text-sm font-medium text-gray-500 truncate">
+                      Medium
+                    </dt>
+                    <dd className="text-lg font-medium text-gray-900">
+                      {questions.filter(q => q.difficulty === 'medium').length}
+                    </dd>
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white overflow-hidden shadow rounded-lg">
+            <div className="p-5">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <div className="h-6 w-6 rounded-full bg-red-100 flex items-center justify-center">
+                    <span className="text-xs font-medium text-red-600">H</span>
+                  </div>
+                </div>
+                <div className="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt className="text-sm font-medium text-gray-500 truncate">
+                      Hard
+                    </dt>
+                    <dd className="text-lg font-medium text-gray-900">
+                      {questions.filter(q => q.difficulty === 'hard').length}
+                    </dd>
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Questions by Level */}
+        <div className="space-y-6">
+          {levels.length === 0 ? (
+            <div className="bg-white shadow rounded-lg p-6 text-center">
+              <Target className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No levels found</h3>
+              <p className="text-gray-500">No levels are available for this subtopic.</p>
+            </div>
+          ) : (
+            levels.sort((a, b) => a.level - b.level).map((level) => {
+              const levelQuestions = questionsByLevel[level.level] || [];
+              
+              return (
+                <div key={level.id} className="bg-white shadow rounded-lg">
+                  <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <h3 className="text-lg font-medium text-gray-900">
+                          Level {level.level}: {level.name}
+                        </h3>
+                        <p className="text-sm text-gray-600">{level.description}</p>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                          {levelQuestions.length} questions
+                        </span>
+                        <button
+                          onClick={() => {
+                            setSelectedLevel(level.level.toString());
+                            setEditingQuestion(null);
+                            setShowAddModal(true);
+                          }}
+                          className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded text-blue-600 bg-blue-100 hover:bg-blue-200"
+                        >
+                          <Plus className="h-3 w-3 mr-1" />
+                          Add Question
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {levelQuestions.length === 0 ? (
+                    <div className="p-6 text-center text-gray-500">
+                      <p>No questions yet for this level.</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-gray-200">
+                      {levelQuestions.map((question, index) => (
+                        <div key={question.id} className="p-6 hover:bg-gray-50">
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-2 mb-2">
+                                <span className="text-sm font-medium text-gray-900">
+                                  Q{index + 1}.
+                                </span>
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${{
+                                  easy: 'bg-green-100 text-green-800',
+                                  medium: 'bg-yellow-100 text-yellow-800',
+                                  hard: 'bg-red-100 text-red-800'
+                                }[question.difficulty] || 'bg-gray-100 text-gray-800'}`}>
+                                  {question.difficulty}
+                                </span>
+                              </div>
+                              
+                              <h4 className="text-base font-medium text-gray-900 mb-3">
+                                {question.question}
+                              </h4>
+                              
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
+                                {question.options.map((option, optionIndex) => (
+                                  <div 
+                                    key={optionIndex}
+                                    className={`p-2 text-sm rounded border $${
+                                      optionIndex === question.correctAnswer 
+                                        ? 'bg-green-50 border-green-200 text-green-800' 
+                                        : 'bg-gray-50 border-gray-200'
+                                    }`}
+                                  >
+                                    <span className="font-medium">
+                                      {String.fromCharCode(65 + optionIndex)}.
+                                    </span> {option}
+                                  </div>
+                                ))}
+                              </div>
+                              
+                              {question.explanation && (
+                                <div className="bg-blue-50 p-3 rounded-md">
+                                  <p className="text-sm text-blue-800">
+                                    <strong>Explanation:</strong> {question.explanation}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                            
+                            <div className="ml-6 flex items-center space-x-2">
+                              <button
+                                onClick={() => handleEditQuestion(question)}
+                                className="text-indigo-600 hover:text-indigo-900 inline-flex items-center"
+                              >
+                                <Edit className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteQuestion(question.id)}
+                                className="text-red-600 hover:text-red-900 inline-flex items-center"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+
+      {/* Add/Edit Question Modal */}
+      <QuestionModal
+        isOpen={showAddModal}
+        onClose={() => {
+          setShowAddModal(false);
+          setEditingQuestion(null);
+          setSelectedLevel('');
+        }}
+        onSave={loadData}
+        question={editingQuestion}
+        topicId={topicId}
+        subtopicId={subtopicId}
+        levels={levels}
+        selectedLevel={selectedLevel}
+      />
+
+      {/* Bulk Import Modal */}
+      <BulkImportModal
+        isOpen={showBulkImportModal}
+        onClose={() => setShowBulkImportModal(false)}
+        onSave={loadData}
+        topicId={topicId}
+        subtopicId={subtopicId}
+      />
+    </AdminLayout>
+  );
+}
+
+// Question Modal Component
+function QuestionModal({ 
+  isOpen, 
+  onClose, 
+  onSave, 
+  question, 
+  topicId, 
+  subtopicId, 
+  levels, 
+  selectedLevel 
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: () => void;
+  question: Question | null;
+  topicId: string;
+  subtopicId: string;
+  levels: Level[];
+  selectedLevel: string;
+}) {
+  const [formData, setFormData] = useState({
+    question: '',
+    options: ['', '', '', ''],
+    correctAnswer: 0,
+    explanation: '',
+    difficulty: 'easy',
+    level: selectedLevel || '1'
+  });
+
+  useEffect(() => {
+    if (question) {
+      setFormData({
+        question: question.question,
+        options: question.options,
+        correctAnswer: question.correctAnswer,
+        explanation: question.explanation || '',
+        difficulty: question.difficulty,
+        level: question.level.toString()
+      });
+    } else {
+      setFormData({
+        question: '',
+        options: ['', '', '', ''],
+        correctAnswer: 0,
+        explanation: '',
+        difficulty: 'easy',
+        level: selectedLevel || '1'
+      });
+    }
+  }, [question, selectedLevel]);
+
+  const handleSave = async () => {
+    try {
+      const payload = {
+        question: formData.question,
+        options: formData.options,
+        correctAnswer: formData.correctAnswer,
+        explanation: formData.explanation,
+        difficulty: formData.difficulty,
+        level: parseInt(formData.level),
+        topic_id: topicId,
+        subtopic_id: subtopicId
+      };
+
+      if (question) {
+        await apiService.put(`/admin/questions/${question.id}`, payload);
+        toast.success('Question updated successfully');
+      } else {
+        await apiService.post('/admin/questions', payload);
+        toast.success('Question created successfully');
+      }
+
+      onSave();
+      onClose();
+    } catch (error: any) {
+      console.error('Error saving question:', error);
+      toast.error('Failed to save question');
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-medium text-gray-900">
+            {question ? 'Edit Question' : 'Add New Question'}
+          </h3>
+        </div>
+
+        <div className="px-6 py-4 space-y-4">
+          {/* Level Selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Level
+            </label>
+            <select
+              value={formData.level}
+              onChange={(e) => setFormData({ ...formData, level: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              required
+            >
+              {levels.map((level) => (
+                <option key={level.id} value={level.level.toString()}>
+                  Level {level.level} - {level.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Question */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Question
+            </label>
+            <textarea
+              value={formData.question}
+              onChange={(e) => setFormData({ ...formData, question: e.target.value })}
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Enter the question..."
+              required
+            />
+          </div>
+
+          {/* Options */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Options
+            </label>
+            <div className="space-y-2">
+              {formData.options.map((option, index) => (
+                <div key={index} className="flex items-center space-x-2">
+                  <span className="w-8 text-sm font-medium text-gray-500">
+                    {String.fromCharCode(65 + index)}.
+                  </span>
+                  <input
+                    type="text"
+                    value={option}
+                    onChange={(e) => {
+                      const newOptions = [...formData.options];
+                      newOptions[index] = e.target.value;
+                      setFormData({ ...formData, options: newOptions });
+                    }}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    placeholder={`Option ${String.fromCharCode(65 + index)}`}
+                    required
+                  />
+                  <input
+                    type="radio"
+                    name="correctAnswer"
+                    checked={formData.correctAnswer === index}
+                    onChange={() => setFormData({ ...formData, correctAnswer: index })}
+                    className="text-blue-600 focus:ring-blue-500"
+                  />
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              Select the correct answer by clicking the radio button
+            </p>
+          </div>
+
+          {/* Difficulty */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Difficulty
+            </label>
+            <select
+              value={formData.difficulty}
+              onChange={(e) => setFormData({ ...formData, difficulty: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              required
+            >
+              <option value="easy">Easy</option>
+              <option value="medium">Medium</option>
+              <option value="hard">Hard</option>
+            </select>
+          </div>
+
+          {/* Explanation */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Explanation (Optional)
+            </label>
+            <textarea
+              value={formData.explanation}
+              onChange={(e) => setFormData({ ...formData, explanation: e.target.value })}
+              rows={2}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Explain why this answer is correct..."
+            />
+          </div>
+        </div>
+
+        <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md"
+          >
+            {question ? 'Update' : 'Create'} Question
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Bulk Import Modal Component
+function BulkImportModal({ 
+  isOpen, 
+  onClose, 
+  onSave, 
+  topicId, 
+  subtopicId 
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: () => void;
+  topicId: string;
+  subtopicId: string;
+}) {
+  const [file, setFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const downloadTemplate = () => {
+    const csvContent = [
+      'level,question,option_a,option_b,option_c,option_d,correct_answer,explanation',
+      '1,"What is the capital of France?","London","Berlin","Paris","Madrid","C","Paris is the capital city of France"',
+      '2,"Which planet is closest to the Sun?","Venus","Mercury","Earth","Mars","B","Mercury is the closest planet to the Sun"',
+      '3,"What is the largest mammal?","Elephant","Whale","Giraffe","Hippo","B","The blue whale is the largest mammal"'
+    ].join('\\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'questions_template.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile && (selectedFile.type === 'text/csv' || selectedFile.name.endsWith('.csv'))) {
+      setFile(selectedFile);
+    } else {
+      toast.error('Please select a CSV file');
+    }
+  };
+
+  const handleUpload = async () => {
+    if (!file) {
+      toast.error('Please select a file');
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      // Parse CSV file
+      const text = await file.text();
+      const lines = text.split('\\n').filter(line => line.trim());
+      
+      if (lines.length < 2) {
+        toast.error('CSV file must have at least a header row and one data row');
+        return;
+      }
+
+      // Parse header to get column indices
+      const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+      const getColumnIndex = (columnName: string) => {
+        const index = headers.findIndex(h => h.includes(columnName));
+        return index >= 0 ? index : -1;
+      };
+
+      const levelCol = getColumnIndex('level');
+      const questionCol = getColumnIndex('question');
+      const optionACol = getColumnIndex('option_a');
+      const optionBCol = getColumnIndex('option_b');
+      const optionCCol = getColumnIndex('option_c');
+      const optionDCol = getColumnIndex('option_d');
+      const correctCol = getColumnIndex('correct');
+      const explanationCol = getColumnIndex('explanation');
+
+      if (questionCol === -1 || optionACol === -1 || optionBCol === -1 || optionCCol === -1 || optionDCol === -1 || correctCol === -1) {
+        toast.error('CSV must contain: question, option_a, option_b, option_c, option_d, correct_answer columns');
+        return;
+      }
+
+      // Parse data rows
+      const questionsData = [];
+      for (let i = 1; i < lines.length; i++) {
+        const columns = lines[i].split(',').map(col => col.trim().replace(/^"|"$/g, ''));
+        
+        if (columns.length < headers.length) continue; // Skip incomplete rows
+
+        // Convert correct answer letter to index
+        const correctAnswerLetter = columns[correctCol].toUpperCase();
+        let correctAnswerIndex = 0;
+        switch (correctAnswerLetter) {
+          case 'A': correctAnswerIndex = 0; break;
+          case 'B': correctAnswerIndex = 1; break;
+          case 'C': correctAnswerIndex = 2; break;
+          case 'D': correctAnswerIndex = 3; break;
+          default: correctAnswerIndex = 0;
+        }
+
+        const level = levelCol >= 0 ? parseInt(columns[levelCol]) || 1 : 1;
+        
+        // Determine difficulty based on level number
+        let difficulty = 'medium';
+        if (level <= 2) {
+          difficulty = 'easy';
+        } else if (level >= 5) {
+          difficulty = 'hard';
+        }
+
+        questionsData.push({
+          level,
+          question: columns[questionCol],
+          options: [
+            columns[optionACol],
+            columns[optionBCol],
+            columns[optionCCol],
+            columns[optionDCol]
+          ],
+          correctAnswer: correctAnswerIndex,
+          explanation: explanationCol >= 0 ? columns[explanationCol] : '',
+          difficulty
+        });
+      }
+
+      // Send to backend
+      const response = await apiService.post('/admin/questions/bulk-import', {
+        topicId,
+        subtopicId,
+        questionsData
+      });
+
+      if (response.created > 0) {
+        toast.success(`Successfully imported ${response.created} questions`);
+        if (response.errors > 0) {
+          toast.error(`${response.errors} questions failed to import`);
+        }
+      } else {
+        toast.error('No questions were imported');
+      }
+
+      onSave();
+      onClose();
+      setFile(null);
+    } catch (error: any) {
+      console.error('Error uploading file:', error);
+      toast.error('Failed to import questions: ' + (error.message || 'Unknown error'));
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-medium text-gray-900">
+            Bulk Import Questions
+          </h3>
+        </div>
+
+        <div className="px-6 py-4 space-y-4">
+          <div>
+            <p className="text-sm text-gray-600 mb-4">
+              Upload a CSV file with questions. Use the template format with columns:
+            </p>
+            <ul className="text-xs text-gray-500 space-y-1 mb-4">
+              <li>• level (number)</li>
+              <li>• question (text)</li>
+              <li>• option_a, option_b, option_c, option_d (text)</li>
+              <li>• correct_answer (A, B, C, or D)</li>
+              <li>• explanation (optional text)</li>
+            </ul>
+            <button
+              onClick={downloadTemplate}
+              className="text-sm text-blue-600 hover:text-blue-800 underline"
+            >
+              Download CSV Template
+            </button>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Select CSV File
+            </label>
+            <input
+              type="file"
+              accept=".csv"
+              onChange={handleFileChange}
+              className="block w-full text-sm text-gray-500
+                file:mr-4 file:py-2 file:px-4
+                file:rounded-md file:border-0
+                file:text-sm file:font-medium
+                file:bg-blue-50 file:text-blue-700
+                hover:file:bg-blue-100"
+            />
+          </div>
+
+          {file && (
+            <div className="bg-green-50 p-3 rounded-md">
+              <p className="text-sm text-green-800">
+                Selected: {file.name}
+              </p>
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleUpload}
+            disabled={!file || isUploading}
+            className="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isUploading ? 'Uploading...' : 'Import Questions'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
