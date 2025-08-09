@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import AdminLayout from '@/components/AdminLayout';
-import { ArrowLeft, Plus, Edit, Trash2, BookOpen, HelpCircle } from 'lucide-react';
+import { ArrowLeft, Plus, Edit, Trash2, BookOpen, HelpCircle, Upload } from 'lucide-react';
 import { Topic, Subtopic } from '@/types';
 import { apiService } from '@/services/apiService';
 import toast from 'react-hot-toast';
@@ -11,7 +11,7 @@ import toast from 'react-hot-toast';
 export default function TopicDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const topicId = params.id as string;
+  const topicId = params?.id as string;
   
   const [topic, setTopic] = useState<Topic | null>(null);
   const [subtopics, setSubtopics] = useState<Subtopic[]>([]);
@@ -19,6 +19,8 @@ export default function TopicDetailPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingSubtopic, setEditingSubtopic] = useState<Subtopic | null>(null);
+  const [showDocxUpload, setShowDocxUpload] = useState(false);
+  const [selectedSubtopic, setSelectedSubtopic] = useState<string>('');
 
   useEffect(() => {
     if (topicId) {
@@ -119,13 +121,22 @@ export default function TopicDetailPage() {
               <h1 className="text-2xl font-bold text-gray-900">{topic.name}</h1>
               <p className="mt-1 text-sm text-gray-600">{topic.description}</p>
             </div>
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Add Subtopic
-            </button>
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setShowDocxUpload(true)}
+                className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                Import Questions
+              </button>
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Subtopic
+              </button>
+            </div>
           </div>
         </div>
 
@@ -287,7 +298,259 @@ export default function TopicDetailPage() {
         topicId={topicId}
         subtopic={editingSubtopic}
       />
+
+      {/* DOCX Upload Modal */}
+      <DocxUploadModal
+        isOpen={showDocxUpload}
+        onClose={() => setShowDocxUpload(false)}
+        topicId={topicId}
+        subtopics={subtopics}
+        onSuccess={() => {
+          setShowDocxUpload(false);
+          loadTopicData();
+        }}
+      />
     </AdminLayout>
+  );
+}
+
+// DOCX Upload Modal Component
+function DocxUploadModal({
+  isOpen,
+  onClose,
+  topicId,
+  subtopics,
+  onSuccess
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  topicId: string;
+  subtopics: Subtopic[];
+  onSuccess: () => void;
+}) {
+  const [file, setFile] = useState<File | null>(null);
+  const [selectedSubtopic, setSelectedSubtopic] = useState<string>('');
+  const [isUploading, setIsUploading] = useState(false);
+  const [parsedQuestions, setParsedQuestions] = useState<any[]>([]);
+  const [showPreview, setShowPreview] = useState(false);
+
+  const parseQuestionText = (text: string) => {
+    const questions = [];
+    // Split by Question pattern and process each section
+    const sections = text.split(/Question\s+\d+\s+–\s+\((Easy|Medium|Hard)\)/i);
+    
+    for (let i = 1; i < sections.length; i += 2) {
+      const difficulty = sections[i] || 'Medium';
+      const content = sections[i + 1] || '';
+      
+      // Extract question text (everything before options)
+      const optionMatch = content.match(/^([\s\S]*?)\s*A\)/);
+      if (!optionMatch) continue;
+      
+      const questionText = optionMatch[1].trim();
+      
+      // Extract options
+      const optionAMatch = content.match(/A\)\s*([\s\S]*?)\s*B\)/);
+      const optionBMatch = content.match(/B\)\s*([\s\S]*?)\s*C\)/);
+      const optionCMatch = content.match(/C\)\s*([\s\S]*?)\s*D\)/);
+      const optionDMatch = content.match(/D\)\s*([\s\S]*?)\s*Answer:/);
+      
+      if (!optionAMatch || !optionBMatch || !optionCMatch || !optionDMatch) continue;
+      
+      // Extract correct answer
+      const answerMatch = content.match(/Answer:\s*([A-D])\)/i);
+      if (!answerMatch) continue;
+      
+      const level = difficulty.toLowerCase() === 'easy' ? 1 : difficulty.toLowerCase() === 'hard' ? 5 : 3;
+      const correctIndex = ['A', 'B', 'C', 'D'].indexOf(answerMatch[1].toUpperCase());
+      const choices = [
+        optionAMatch[1].trim(),
+        optionBMatch[1].trim(),
+        optionCMatch[1].trim(),
+        optionDMatch[1].trim()
+      ];
+      
+      questions.push({
+        question: questionText,
+        choices,
+        correctAnswer: choices[correctIndex] || choices[0],
+        level,
+        difficulty: difficulty.toLowerCase()
+      });
+    }
+    
+    return questions;
+  };
+
+  const handleParseText = () => {
+    const textArea = document.getElementById('docxTextInput') as HTMLTextAreaElement;
+    if (!textArea.value.trim()) {
+      toast.error('Please paste the question content');
+      return;
+    }
+    
+    try {
+      const questions = parseQuestionText(textArea.value);
+      if (questions.length === 0) {
+        toast.error('No questions found. Please check the format.');
+        return;
+      }
+      
+      setParsedQuestions(questions);
+      setShowPreview(true);
+      toast.success(`Found ${questions.length} questions`);
+    } catch (error) {
+      console.error('Parse error:', error);
+      toast.error('Failed to parse questions');
+    }
+  };
+
+  const handleUpload = async () => {
+    if (!selectedSubtopic) {
+      toast.error('Please select a subtopic');
+      return;
+    }
+
+    if (parsedQuestions.length === 0) {
+      toast.error('No questions to upload');
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const questionsData = parsedQuestions.map(q => ({
+        level_id: `level_${q.level}_${selectedSubtopic}`,
+        subtopic_id: selectedSubtopic,
+        topic_id: topicId,
+        question: q.question,
+        choices: q.choices,
+        correctAnswer: q.correctAnswer,
+        explanation: '',
+        difficulty: q.difficulty
+      }));
+
+      // Upload questions one by one
+      for (const questionData of questionsData) {
+        await apiService.post('/admin/questions', questionData);
+      }
+
+      toast.success(`Successfully uploaded ${questionsData.length} questions`);
+      onSuccess();
+    } catch (error: any) {
+      console.error('Upload error:', error);
+      toast.error('Failed to upload questions');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleClose = () => {
+    setFile(null);
+    setSelectedSubtopic('');
+    setParsedQuestions([]);
+    setShowPreview(false);
+    onClose();
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-medium text-gray-900">
+            Import Questions from DOCX
+          </h3>
+        </div>
+
+        <div className="px-6 py-4 space-y-6">
+          {/* Subtopic Selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Select Subtopic
+            </label>
+            <select
+              value={selectedSubtopic}
+              onChange={(e) => setSelectedSubtopic(e.target.value)}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+            >
+              <option value="">Choose a subtopic...</option>
+              {subtopics.map(subtopic => (
+                <option key={subtopic.id} value={subtopic.id}>
+                  {subtopic.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Text Input for Questions */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Paste Question Content
+            </label>
+            <p className="text-xs text-gray-500 mb-2">
+              Expected format: Question 1 – (Easy) [question text] A) [option] B) [option] C) [option] D) [option] Answer: [letter]
+            </p>
+            <textarea
+              id="docxTextInput"
+              rows={10}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+              placeholder="Paste your questions here..."
+            />
+            <button
+              onClick={handleParseText}
+              className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
+            >
+              Parse Questions
+            </button>
+          </div>
+
+          {/* Preview */}
+          {showPreview && parsedQuestions.length > 0 && (
+            <div className="border rounded-lg p-4">
+              <h4 className="font-medium text-gray-900 mb-3">
+                Preview ({parsedQuestions.length} questions found)
+              </h4>
+              <div className="space-y-3 max-h-60 overflow-y-auto">
+                {parsedQuestions.slice(0, 3).map((q, index) => (
+                  <div key={index} className="border-l-4 border-blue-500 pl-3 py-2 bg-gray-50">
+                    <p className="font-medium text-sm">{q.question}</p>
+                    <div className="grid grid-cols-2 gap-2 mt-2 text-xs">
+                      {q.choices.map((choice: string, i: number) => (
+                        <span key={i} className={choice === q.correctAnswer ? 'text-green-600 font-medium' : 'text-gray-600'}>
+                          {String.fromCharCode(65 + i)}) {choice}
+                        </span>
+                      ))}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">Level: {q.level} ({q.difficulty})</p>
+                  </div>
+                ))}
+                {parsedQuestions.length > 3 && (
+                  <p className="text-sm text-gray-500">... and {parsedQuestions.length - 3} more questions</p>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+          <button
+            onClick={handleClose}
+            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md"
+            disabled={isUploading}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleUpload}
+            disabled={isUploading || !selectedSubtopic || parsedQuestions.length === 0}
+            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md disabled:opacity-50"
+          >
+            {isUploading ? 'Uploading...' : `Upload ${parsedQuestions.length} Questions`}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

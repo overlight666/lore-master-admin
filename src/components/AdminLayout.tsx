@@ -60,7 +60,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           <nav className="flex-1 px-4 py-4">
             <ul className="space-y-2">
               {navigation.map((item) => {
-                const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+                const isActive = pathname === item.href || (pathname && pathname.startsWith(item.href + '/'));
                 return (
                   <li key={item.name}>
                     <Link
@@ -102,7 +102,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           <nav className="flex-1 px-4 py-4">
             <ul className="space-y-2">
               {navigation.map((item) => {
-                const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+                const isActive = pathname === item.href || (pathname && pathname.startsWith(item.href + '/'));
                 return (
                   <li key={item.name}>
                     <Link

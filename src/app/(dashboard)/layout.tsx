@@ -24,7 +24,14 @@ export default function DashboardLayout({
     // 3. We're on a dashboard page
     // 4. Haven't redirected yet in this session
     // 5. Not already on login page to prevent loops
-    if (!loading && (!user || !isAdmin) && pathname.startsWith('/dashboard') && !hasRedirected.current && !pathname.includes('/login')) {
+    if (
+      !loading &&
+      (!user || !isAdmin) &&
+      pathname &&
+      pathname.startsWith('/dashboard') &&
+      !hasRedirected.current &&
+      !pathname.includes('/login')
+    ) {
       hasRedirected.current = true;
       const reason = !user ? 'User not authenticated' : 'User is not admin';
       console.log(`${reason} on dashboard, redirecting to login`);

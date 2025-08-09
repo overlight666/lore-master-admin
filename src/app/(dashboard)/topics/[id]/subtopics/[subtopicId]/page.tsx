@@ -637,7 +637,7 @@ function BulkImportModal({
     setIsUploading(true);
     try {
       const text = await file.text();
-      const lines = text.split('\\n').filter(line => line.trim());
+      const lines = text.split('\n').filter(line => line.trim());
       
       if (lines.length < 2) {
         toast.error('CSV file must have at least a header row and one data row');
