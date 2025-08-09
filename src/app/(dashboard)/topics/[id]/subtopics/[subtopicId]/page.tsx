@@ -81,24 +81,25 @@ export default function SubtopicQuestionsPage() {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [topicData, subtopicData, questionsData, levelsData] = await Promise.all([
+      const [topicData, subtopicData, levelsData] = await Promise.all([
         apiService.get(`/admin/topics/${topicId}`),
         apiService.get(`/admin/subtopics/${subtopicId}`),
-        apiService.get(`/admin/questions?subtopicId=${subtopicId}`),
         apiService.get(`/admin/levels?subtopicId=${subtopicId}`)
       ]);
+      
+      // Load all questions with pagination support
+      const allQuestions = await loadAllQuestions(subtopicId);
       
       setTopic(topicData?.topic || topicData);
       setSubtopic(subtopicData?.subtopic || subtopicData);
       
-      // Handle questions data with defensive programming
-      const questionsArray = questionsData?.data || questionsData?.items || questionsData || [];
-      setQuestions(Array.isArray(questionsArray) ? questionsArray : []);
+      // Set all loaded questions
+      setQuestions(Array.isArray(allQuestions) ? allQuestions : []);
       
       // Handle levels data with defensive programming
       const levelsArray = levelsData?.data || levelsData?.items || levelsData || [];
       setLevels(Array.isArray(levelsArray) ? levelsArray : []);
-      
+
     } catch (error: any) {
       console.error('Error loading data:', error);
       toast.error('Failed to load data');
@@ -107,7 +108,42 @@ export default function SubtopicQuestionsPage() {
     }
   };
 
-  // Group questions by level
+  // Helper function to load all questions across multiple pages
+  const loadAllQuestions = async (subtopicId: string): Promise<Question[]> => {
+    let allQuestions: Question[] = [];
+    let currentPage = 1;
+    let totalPages = 1;
+
+    console.log(`Loading all questions for subtopic ${subtopicId}...`);
+
+    do {
+      try {
+        const response = await apiService.get(`/admin/questions?subtopicId=${subtopicId}&page=${currentPage}&limit=100`);
+        const questionsData = response?.items || response || [];
+        
+        if (Array.isArray(questionsData)) {
+          allQuestions = [...allQuestions, ...questionsData];
+          console.log(`Loaded page ${currentPage}: ${questionsData.length} questions (total so far: ${allQuestions.length})`);
+        }
+        
+        // Update pagination info
+        totalPages = response?.totalPages || 1;
+        currentPage++;
+        
+        // Safety break to prevent infinite loops
+        if (currentPage > 100) {
+          console.warn('Reached maximum page limit (100). There might be an issue with pagination.');
+          break;
+        }
+      } catch (error) {
+        console.error(`Error loading questions page ${currentPage}:`, error);
+        break;
+      }
+    } while (currentPage <= totalPages);
+
+    console.log(`Finished loading all questions. Total: ${allQuestions.length}`);
+    return allQuestions;
+  };  // Group questions by level
   const questionsByLevel = questions.reduce((acc, question) => {
     const level = question.level || 1;
     if (!acc[level]) {
@@ -702,27 +738,26 @@ function BulkImportModal({
         });
       }
 
-      // Send questions one by one to use the regular POST endpoint
-      let created = 0;
-      let errors = 0;
+      // Use bulk create endpoint instead of loop
+      try {
+        const result = await apiService.post('/admin/questions/bulk-create', {
+          topicId,
+          subtopicId: subtopicId,
+          questionsData
+        });
 
-      for (const questionData of questionsData) {
-        try {
-          await apiService.post('/admin/questions', questionData);
-          created++;
-        } catch (error) {
-          console.error('Error creating question:', error);
-          errors++;
+        if (result.success) {
+          toast.success(`Successfully imported ${result.successCount} questions`);
+          if (result.errorCount > 0) {
+            toast.error(`${result.errorCount} questions failed to import`);
+          }
+        } else {
+          toast.error('No questions were imported');
         }
-      }
-
-      if (created > 0) {
-        toast.success(`Successfully imported ${created} questions`);
-        if (errors > 0) {
-          toast.error(`${errors} questions failed to import`);
-        }
-      } else {
-        toast.error('No questions were imported');
+      } catch (error) {
+        console.error('Error importing questions:', error);
+        toast.error('Failed to import questions');
+        return;
       }
 
       onSave();

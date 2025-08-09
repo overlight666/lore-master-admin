@@ -333,6 +333,23 @@ function DocxUploadModal({
   const [isUploading, setIsUploading] = useState(false);
   const [parsedQuestions, setParsedQuestions] = useState<any[]>([]);
   const [showPreview, setShowPreview] = useState(false);
+  const [uploadMethod, setUploadMethod] = useState<'file' | 'text'>('text');
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile && (
+      selectedFile.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+      selectedFile.type === 'text/csv' ||
+      selectedFile.name.endsWith('.docx') ||
+      selectedFile.name.endsWith('.csv')
+    )) {
+      setFile(selectedFile);
+      setParsedQuestions([]);
+      setShowPreview(false);
+    } else {
+      toast.error('Please select a DOCX or CSV file');
+    }
+  };
 
   const parseQuestionText = (text: string) => {
     const questions = [];
@@ -405,7 +422,48 @@ function DocxUploadModal({
     }
   };
 
+  const handleFileUpload = async () => {
+    if (!selectedSubtopic) {
+      toast.error('Please select a subtopic');
+      return;
+    }
+
+    if (!file) {
+      toast.error('Please select a file');
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('topicId', topicId);
+      formData.append('subtopicId', selectedSubtopic);
+
+      const response = await apiService.postFormData('/admin/questions/upload-bulk', formData);
+      
+      if (response.success) {
+        toast.success(`Successfully uploaded ${response.successCount} questions`);
+        if (response.errorCount > 0) {
+          toast.error(`${response.errorCount} questions failed to upload`);
+        }
+        onSuccess();
+      } else {
+        toast.error('Failed to upload file');
+      }
+    } catch (error: any) {
+      console.error('File upload error:', error);
+      toast.error('Failed to upload file');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   const handleUpload = async () => {
+    if (uploadMethod === 'file') {
+      return handleFileUpload();
+    }
+
     if (!selectedSubtopic) {
       toast.error('Please select a subtopic');
       return;
@@ -429,12 +487,21 @@ function DocxUploadModal({
         difficulty: q.difficulty
       }));
 
-      // Upload questions one by one
-      for (const questionData of questionsData) {
-        await apiService.post('/admin/questions', questionData);
-      }
+      // Upload all questions in bulk using the optimized endpoint
+      const result = await apiService.post('/admin/questions/bulk-create', {
+        topicId,
+        subtopicId: selectedSubtopic,
+        questionsData
+      });
 
-      toast.success(`Successfully uploaded ${questionsData.length} questions`);
+      if (result.success) {
+        toast.success(`Successfully uploaded ${result.successCount} questions`);
+        if (result.errorCount > 0) {
+          toast.error(`${result.errorCount} questions failed to upload`);
+        }
+      } else {
+        toast.error('Failed to upload questions');
+      }
       onSuccess();
     } catch (error: any) {
       console.error('Upload error:', error);
@@ -449,6 +516,7 @@ function DocxUploadModal({
     setSelectedSubtopic('');
     setParsedQuestions([]);
     setShowPreview(false);
+    setUploadMethod('text');
     onClose();
   };
 
@@ -483,27 +551,79 @@ function DocxUploadModal({
             </select>
           </div>
 
-          {/* Text Input for Questions */}
+          {/* Upload Method Selection */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Paste Question Content
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Upload Method
             </label>
-            <p className="text-xs text-gray-500 mb-2">
-              Expected format: Question 1 – (Easy) [question text] A) [option] B) [option] C) [option] D) [option] Answer: [letter]
-            </p>
-            <textarea
-              id="docxTextInput"
-              rows={10}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
-              placeholder="Paste your questions here..."
-            />
-            <button
-              onClick={handleParseText}
-              className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
-            >
-              Parse Questions
-            </button>
+            <div className="flex space-x-4">
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  value="file"
+                  checked={uploadMethod === 'file'}
+                  onChange={(e) => setUploadMethod(e.target.value as 'file' | 'text')}
+                  className="mr-2"
+                />
+                File Upload (DOCX/CSV)
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  value="text"
+                  checked={uploadMethod === 'text'}
+                  onChange={(e) => setUploadMethod(e.target.value as 'file' | 'text')}
+                  className="mr-2"
+                />
+                Paste Text
+              </label>
+            </div>
           </div>
+
+          {uploadMethod === 'file' ? (
+            /* File Upload */
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Upload File
+              </label>
+              <p className="text-xs text-gray-500 mb-2">
+                Supported formats: DOCX (with specific format) or CSV
+              </p>
+              <input
+                type="file"
+                accept=".docx,.csv"
+                onChange={handleFileChange}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+              />
+              {file && (
+                <p className="text-sm text-green-600 mt-2">
+                  Selected: {file.name} ({(file.size / 1024).toFixed(1)} KB)
+                </p>
+              )}
+            </div>
+          ) : (
+            /* Text Input for Questions */
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Paste Question Content
+              </label>
+              <p className="text-xs text-gray-500 mb-2">
+                Expected format: Question 1 – (Easy) [question text] A) [option] B) [option] C) [option] D) [option] Answer: [letter]
+              </p>
+              <textarea
+                id="docxTextInput"
+                rows={10}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                placeholder="Paste your questions here..."
+              />
+              <button
+                onClick={handleParseText}
+                className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
+              >
+                Parse Questions
+              </button>
+            </div>
+          )}
 
           {/* Preview */}
           {showPreview && parsedQuestions.length > 0 && (
@@ -543,10 +663,17 @@ function DocxUploadModal({
           </button>
           <button
             onClick={handleUpload}
-            disabled={isUploading || !selectedSubtopic || parsedQuestions.length === 0}
+            disabled={
+              isUploading || 
+              !selectedSubtopic || 
+              (uploadMethod === 'text' && parsedQuestions.length === 0) ||
+              (uploadMethod === 'file' && !file)
+            }
             className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md disabled:opacity-50"
           >
-            {isUploading ? 'Uploading...' : `Upload ${parsedQuestions.length} Questions`}
+            {isUploading ? 'Uploading...' : 
+             uploadMethod === 'file' ? 'Upload File' : 
+             `Upload ${parsedQuestions.length} Questions`}
           </button>
         </div>
       </div>

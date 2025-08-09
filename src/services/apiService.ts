@@ -103,6 +103,17 @@ export const apiService = {
     const response = await apiClient.patch(url, data, config);
     return response.data;
   },
+
+  postFormData: async <T = any>(url: string, formData: FormData, config?: any): Promise<T> => {
+    const response = await apiClient.post(url, formData, {
+      ...config,
+      headers: {
+        ...config?.headers,
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
 };
 
 export default apiService;

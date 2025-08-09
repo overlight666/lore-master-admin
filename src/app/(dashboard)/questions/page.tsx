@@ -17,8 +17,8 @@ interface Level {
 
 export default function QuestionsPage() {
   const searchParams = useSearchParams();
-  const urlTopic = searchParams.get('topic');
-  const urlSubtopic = searchParams.get('subtopic');
+  const urlTopic = searchParams?.get('topic');
+  const urlSubtopic = searchParams?.get('subtopic');
   
   const [questions, setQuestions] = useState<Question[]>([]);
   const [questionsByDifficulty, setQuestionsByDifficulty] = useState<{[key: string]: Question[]}>({});
@@ -52,27 +52,56 @@ export default function QuestionsPage() {
     filterQuestions();
   }, [questions, searchTerm, selectedTopic, selectedSubtopic, selectedLevel]);
 
+  // Helper function to load all questions across multiple pages
+  const loadAllQuestions = async (): Promise<Question[]> => {
+    let allQuestions: Question[] = [];
+    let currentPage = 1;
+    let totalPages = 1;
+
+    do {
+      try {
+        // Build query parameters
+        const params = new URLSearchParams();
+        if (selectedTopic) params.append('topicId', selectedTopic);
+        if (selectedSubtopic) params.append('subtopicId', selectedSubtopic);
+        params.append('page', currentPage.toString());
+        params.append('limit', '100');
+        
+        const response = await apiService.get(`/admin/questions?${params.toString()}`);
+        const questionsData = response?.items || response || [];
+        
+        if (Array.isArray(questionsData)) {
+          allQuestions = [...allQuestions, ...questionsData];
+        }
+        
+        // Update pagination info
+        totalPages = response?.totalPages || 1;
+        currentPage++;
+        
+        // Safety break to prevent infinite loops
+        if (currentPage > 100) {
+          console.warn('Reached maximum page limit (100). There might be an issue with pagination.');
+          break;
+        }
+      } catch (error) {
+        console.error(`Error loading questions page ${currentPage}:`, error);
+        break;
+      }
+    } while (currentPage <= totalPages);
+
+    return allQuestions;
+  };
+
   const loadData = async () => {
     setIsLoading(true);
     try {
-      // Build query parameters
-      const params = new URLSearchParams();
-      if (selectedTopic) params.append('topicId', selectedTopic);
-      if (selectedSubtopic) params.append('subtopicId', selectedSubtopic);
+      // Load all questions with pagination support
+      const allQuestions = await loadAllQuestions();
       
-      const queryString = params.toString();
-      const questionsUrl = `/admin/questions${queryString ? `?${queryString}` : ''}`;
-      
-      const [questionsResponse, topicsResponse] = await Promise.all([
-        apiService.get(questionsUrl),
-        apiService.get('/admin/topics')
-      ]);
-      
-      const questionsData = questionsResponse.items || questionsResponse.questions || questionsResponse || [];
-      setQuestions(questionsData);
+      setQuestions(allQuestions);
       
       // Group questions by difficulty (using level property)
-      const groupedByDifficulty = questionsData.reduce((acc: {[key: string]: Question[]}, question: Question) => {
+      const groupedByDifficulty = allQuestions.reduce((acc: {[key: string]: Question[]}, question: Question) => {
         const difficulty = question.level ? `Level ${question.level}` : 'Unspecified';
         if (!acc[difficulty]) {
           acc[difficulty] = [];
@@ -82,6 +111,9 @@ export default function QuestionsPage() {
       }, {});
       
       setQuestionsByDifficulty(groupedByDifficulty);
+      
+      // Load topics
+      const topicsResponse = await apiService.get('/admin/topics?limit=1000');
       
       // Ensure topics is always an array
       let topicsData = [];
