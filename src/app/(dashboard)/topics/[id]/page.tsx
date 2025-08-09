@@ -329,14 +329,14 @@ function SubtopicModal({ isOpen, onClose, onSave, title, topicId, subtopic }: Su
       const subtopicData = {
         name: name.trim(),
         description: description.trim(),
-        topicId,
+        topic_id: topicId, // Changed from topicId to topic_id
       };
 
       if (subtopic?.id) {
-        await apiService.put(`/subtopics/${subtopic.id}`, subtopicData);
+        await apiService.put(`/admin/subtopics/${subtopic.id}`, subtopicData);
         toast.success('Subtopic updated successfully');
       } else {
-        await apiService.post('/subtopics', subtopicData);
+        await apiService.post('/admin/subtopics', subtopicData);
         toast.success('Subtopic created successfully');
       }
 

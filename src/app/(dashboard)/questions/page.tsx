@@ -543,18 +543,26 @@ function QuestionModal({ isOpen, onClose, onSave, title, topics, subtopics, ques
   const [level, setLevel] = useState(1);
   const [levels, setLevels] = useState<any[]>([]);
   const [levelId, setLevelId] = useState('');
+  const [modalSubtopics, setModalSubtopics] = useState<Subtopic[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Initialize modal subtopics with the passed subtopics
+  useEffect(() => {
+    setModalSubtopics(subtopics);
+  }, [subtopics]);
 
   useEffect(() => {
     if (question) {
       setQuestionText(question.question);
-      setOptions(question.options);
+      // Handle both choices and options for backward compatibility
+      const questionChoices = question.choices || question.options || ['', '', '', ''];
+      setOptions(questionChoices);
       setCorrectAnswer(question.correctAnswer);
       setExplanation(question.explanation || '');
       setTopicId(question.topic_id);
       setSubtopicId(question.subtopic_id);
       setLevel(question.level);
-      // Note: levelId will be set when levels are loaded via subtopic effect
+      setLevelId(question.level_id || '');
     } else {
       setQuestionText('');
       setOptions(['', '', '', '']);
@@ -568,13 +576,62 @@ function QuestionModal({ isOpen, onClose, onSave, title, topics, subtopics, ques
     }
   }, [question]);
 
+  // Load subtopics when topic changes
+  useEffect(() => {
+    const loadSubtopics = async () => {
+      if (topicId) {
+        try {
+          const subtopicsResponse = await apiService.get(`/admin/topics/${topicId}/subtopics`);
+          // Handle different response formats
+          let subtopicsData = [];
+          if (subtopicsResponse?.data && Array.isArray(subtopicsResponse.data)) {
+            subtopicsData = subtopicsResponse.data;
+          } else if (subtopicsResponse?.items && Array.isArray(subtopicsResponse.items)) {
+            subtopicsData = subtopicsResponse.items;
+          } else if (subtopicsResponse?.subtopics && Array.isArray(subtopicsResponse.subtopics)) {
+            subtopicsData = subtopicsResponse.subtopics;
+          } else if (Array.isArray(subtopicsResponse)) {
+            subtopicsData = subtopicsResponse;
+          }
+          
+          // Update the modal's local subtopics state
+          setModalSubtopics(subtopicsData);
+        } catch (error) {
+          console.error('Error loading subtopics for modal:', error);
+          setModalSubtopics([]);
+        }
+      }
+    };
+
+    loadSubtopics();
+  }, [topicId]);
+
   // Load levels when subtopic changes
   useEffect(() => {
     const loadLevels = async () => {
       if (subtopicId) {
         try {
-          const levelsData = await apiService.get(`/admin/levels?subtopicId=${subtopicId}`);
-          setLevels(levelsData.items || []);
+          const levelsResponse = await apiService.get(`/admin/levels?subtopicId=${subtopicId}`);
+          // Handle different response formats
+          let levelsData = [];
+          if (levelsResponse?.data && Array.isArray(levelsResponse.data)) {
+            levelsData = levelsResponse.data;
+          } else if (levelsResponse?.items && Array.isArray(levelsResponse.items)) {
+            levelsData = levelsResponse.items;
+          } else if (levelsResponse?.levels && Array.isArray(levelsResponse.levels)) {
+            levelsData = levelsResponse.levels;
+          } else if (Array.isArray(levelsResponse)) {
+            levelsData = levelsResponse;
+          }
+          setLevels(levelsData);
+          
+          // If editing a question with level_id, set it after levels are loaded
+          if (question && question.level_id && levelsData.length > 0) {
+            const foundLevel = levelsData.find((l: any) => l.id === question.level_id);
+            if (foundLevel) {
+              setLevelId(foundLevel.id);
+            }
+          }
         } catch (error) {
           console.error('Error loading levels:', error);
           setLevels([]);
@@ -586,7 +643,7 @@ function QuestionModal({ isOpen, onClose, onSave, title, topics, subtopics, ques
     };
 
     loadLevels();
-  }, [subtopicId]);
+  }, [subtopicId, question]);
 
   const handleOptionChange = (index: number, value: string) => {
     const newOptions = [...options];
@@ -597,7 +654,7 @@ function QuestionModal({ isOpen, onClose, onSave, title, topics, subtopics, ques
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!questionText.trim() || !topicId || !subtopicId || !levelId || !correctAnswer.trim()) {
+    if (!questionText.trim() || !topicId || !subtopicId || !correctAnswer.trim()) {
       toast.error('Please fill in all required fields');
       return;
     }
@@ -614,6 +671,12 @@ function QuestionModal({ isOpen, onClose, onSave, title, topics, subtopics, ques
 
     setIsLoading(true);
     try {
+      // Determine difficulty based on level
+      const difficulty = level <= 2 ? 'easy' : level >= 5 ? 'hard' : 'medium';
+      
+      // Create level_id if not provided (for new questions)
+      const finalLevelId = levelId || `level_${level}_${subtopicId}`;
+
       const questionData = {
         question: questionText.trim(),
         choices: options.map(opt => opt.trim()),
@@ -621,7 +684,8 @@ function QuestionModal({ isOpen, onClose, onSave, title, topics, subtopics, ques
         explanation: explanation.trim(),
         topic_id: topicId,
         subtopic_id: subtopicId,
-        level_id: levelId,
+        level_id: finalLevelId,
+        difficulty
       };
 
       if (question?.id) {
@@ -644,7 +708,7 @@ function QuestionModal({ isOpen, onClose, onSave, title, topics, subtopics, ques
 
   if (!isOpen) return null;
 
-  const availableSubtopics = Array.isArray(subtopics) ? subtopics.filter(s => s.topic_id === topicId) : [];
+  const availableSubtopics = Array.isArray(modalSubtopics) ? modalSubtopics.filter(s => s.topic_id === topicId) : [];
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -663,6 +727,7 @@ function QuestionModal({ isOpen, onClose, onSave, title, topics, subtopics, ques
                 onChange={(e) => {
                   setTopicId(e.target.value);
                   setSubtopicId(''); // Reset subtopic when topic changes
+                  setLevelId(''); // Reset level when topic changes
                 }}
                 className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 disabled={isLoading}
@@ -697,7 +762,7 @@ function QuestionModal({ isOpen, onClose, onSave, title, topics, subtopics, ques
 
           <div>
             <label htmlFor="levelId" className="block text-sm font-medium text-gray-700">
-              Level *
+              Level (Optional - will be auto-created if not selected)
             </label>
             <select
               id="levelId"
@@ -705,20 +770,39 @@ function QuestionModal({ isOpen, onClose, onSave, title, topics, subtopics, ques
               onChange={(e) => setLevelId(e.target.value)}
               className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
               disabled={isLoading || !subtopicId}
-              required
             >
-              <option value="">Select a level</option>
-              {levels.map(level => (
-                <option key={level.id} value={level.id}>
-                  {level.name || `Level ${level.level}`}
+              <option value="">Auto-create level {level}</option>
+              {levels.map((levelOption: any) => (
+                <option key={levelOption.id} value={levelOption.id}>
+                  {levelOption.name || `Level ${levelOption.level}`}
                 </option>
               ))}
             </select>
             {levels.length === 0 && subtopicId && (
               <p className="mt-1 text-sm text-gray-500">
-                No levels found. Create levels for this subtopic first.
+                No existing levels found. A new level will be created automatically.
               </p>
             )}
+          </div>
+
+          <div>
+            <label htmlFor="level" className="block text-sm font-medium text-gray-700">
+              Level Number *
+            </label>
+            <select
+              id="level"
+              value={level}
+              onChange={(e) => setLevel(parseInt(e.target.value))}
+              className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              disabled={isLoading}
+              required
+            >
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(levelNum => (
+                <option key={levelNum} value={levelNum}>
+                  Level {levelNum} ({levelNum <= 2 ? 'Easy' : levelNum >= 5 ? 'Hard' : 'Medium'})
+                </option>
+              ))}
+            </select>
           </div>
           
           <div>

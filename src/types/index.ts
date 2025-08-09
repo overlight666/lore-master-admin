@@ -62,11 +62,13 @@ export interface Level {
 export interface Question {
   id: string;
   question: string;
-  options: string[];
+  choices?: string[]; // New backend format
+  options?: string[]; // Backward compatibility
   correctAnswer: string;
   explanation?: string;
   topic_id: string;
   subtopic_id: string;
+  level_id?: string; // Level ID reference
   level: number;
   attempts?: number;
   created_at?: any;
