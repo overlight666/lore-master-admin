@@ -38,6 +38,12 @@ export default function CategoryQuestionsPage() {
     questionCount: number;
     duplicateCount: number;
     errors: string[];
+    duplicateInfo?: {
+      questionNumber: number;
+      questionPreview: string;
+      type: 'database' | 'internal' | 'both';
+      action: 'removed' | 'kept';
+    }[];
   } | null>(null);
   const [importMethod, setImportMethod] = useState<'file' | 'text'>('file');
 
@@ -166,18 +172,93 @@ export default function CategoryQuestionsPage() {
   };
 
   // Bulk import functions
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     const fileExtension = file.name.split('.').pop()?.toLowerCase();
+    
     if (!['csv', 'json'].includes(fileExtension || '')) {
       toast.error('Please upload a CSV or JSON file');
       return;
     }
 
-    setImportFile(file);
-    parseFile(file);
+    try {
+      const content = await file.text();
+      let parsedData: any[] = [];
+
+      if (fileExtension === 'json') {
+        const jsonData = JSON.parse(content);
+        parsedData = Array.isArray(jsonData) ? jsonData : [jsonData];
+      } else if (fileExtension === 'csv') {
+        parsedData = parseCSV(content);
+      }
+
+      // Apply the same duplication handling as text import
+      const existingQuestionsResponse = await questionsApi.getAll({ 
+        topicId, 
+        subtopicId, 
+        categoryId, 
+        limit: 1000 
+      });
+      
+      let existingQuestions: any[] = [];
+      if (existingQuestionsResponse?.data && Array.isArray(existingQuestionsResponse.data)) {
+        existingQuestions = existingQuestionsResponse.data;
+      } else if (existingQuestionsResponse?.items && Array.isArray(existingQuestionsResponse.items)) {
+        existingQuestions = existingQuestionsResponse.items;
+      } else if (Array.isArray(existingQuestionsResponse)) {
+        existingQuestions = existingQuestionsResponse;
+      }
+
+      const processedQuestions = await handleDuplicationRules(parsedData, existingQuestions);
+      const finalQuestions = processedQuestions.filter(q => !q.status?.includes('removed'));
+
+      // Collect detailed duplicate information
+      const dbDuplicates: string[] = [];
+      const parsedDuplicates: string[] = [];
+      const bothDuplicates: string[] = [];
+
+      processedQuestions.forEach((question, index) => {
+        const questionNumber = index + 1;
+        const questionPreview = question.question?.substring(0, 50) + (question.question?.length > 50 ? '...' : '');
+        
+        if (question.status === 'removed_db_duplicate') {
+          dbDuplicates.push(`Question ${questionNumber}: "${questionPreview}"`);
+        } else if (question.status === 'removed_parsed_duplicate') {
+          parsedDuplicates.push(`Question ${questionNumber}: "${questionPreview}"`);
+        } else if (question.status === 'removed_both_duplicate') {
+          bothDuplicates.push(`Question ${questionNumber}: "${questionPreview}"`);
+        }
+      });
+
+      // Show detailed results
+      const totalDuplicatesRemoved = dbDuplicates.length + parsedDuplicates.length + bothDuplicates.length;
+      
+      let message = `File processed: ${finalQuestions.length} questions ready for import`;
+      if (totalDuplicatesRemoved > 0) {
+        message += `, ${totalDuplicatesRemoved} duplicates removed`;
+      }
+      toast.success(message);
+
+      // Show detailed duplicate information if any
+      if (dbDuplicates.length > 0) {
+        console.log(`${dbDuplicates.length} questions removed (already exist in database):`, dbDuplicates);
+      }
+      if (parsedDuplicates.length > 0) {
+        console.log(`${parsedDuplicates.length} duplicate questions removed from import data:`, parsedDuplicates);
+      }
+      if (bothDuplicates.length > 0) {
+        console.log(`${bothDuplicates.length} questions removed (duplicates in both database and import):`, bothDuplicates);
+      }
+
+      setImportData(parsedData);
+      processImportData(finalQuestions);
+      
+    } catch (error) {
+      console.error('File upload error:', error);
+      toast.error('Failed to process file. Please check the format.');
+    }
   };
 
   const parseFile = (file: File) => {
@@ -351,7 +432,7 @@ export default function CategoryQuestionsPage() {
     return data;
   };
 
-  const validatePastedText = (text: string) => {
+  const validatePastedText = async (text: string) => {
     if (!text.trim()) {
       setTextValidation(null);
       return;
@@ -360,8 +441,9 @@ export default function CategoryQuestionsPage() {
     try {
       const parsed = parseText(text);
       const errors: string[] = [];
-      let validQuestions = 0;
+      let validQuestionCount = 0;
       
+      // Basic validation for each question
       parsed.forEach((item, index) => {
         const questionNum = index + 1;
         
@@ -379,55 +461,153 @@ export default function CategoryQuestionsPage() {
           errors.push(`Question ${questionNum}: Correct answer not found in choices`);
         }
         
-        if (errors.length === 0 || errors.filter(e => e.startsWith(`Question ${questionNum}:`)).length === 0) {
-          validQuestions++;
+        if (errors.filter(e => e.startsWith(`Question ${questionNum}:`)).length === 0) {
+          validQuestionCount++;
         }
       });
 
-      // Check for duplicates within parsed questions
-      const questionTexts = parsed.map(q => q.question?.toLowerCase().trim()).filter(Boolean);
-      const uniqueQuestions = new Set(questionTexts);
-      const duplicateCount = questionTexts.length - uniqueQuestions.size;
-
-      // Check for duplicates against existing questions
-      const existingQuestions = questions.map(q => q.question.toLowerCase().trim());
-      const dbDuplicates = questionTexts.filter(q => existingQuestions.includes(q)).length;
-
-      if (duplicateCount > 0) {
-        errors.push(`Found ${duplicateCount} duplicate questions within import data`);
-      }
+      // Get existing questions for duplicate checking
+      const existingQuestionsResponse = await questionsApi.getAll({ 
+        topicId, 
+        subtopicId, 
+        categoryId, 
+        limit: 1000 
+      });
       
-      if (dbDuplicates > 0) {
-        errors.push(`Found ${dbDuplicates} questions that already exist in database`);
+      let existingQuestions: any[] = [];
+      if (existingQuestionsResponse?.data && Array.isArray(existingQuestionsResponse.data)) {
+        existingQuestions = existingQuestionsResponse.data;
+      } else if (existingQuestionsResponse?.items && Array.isArray(existingQuestionsResponse.items)) {
+        existingQuestions = existingQuestionsResponse.items;
+      } else if (Array.isArray(existingQuestionsResponse)) {
+        existingQuestions = existingQuestionsResponse;
       }
+
+      // Apply duplication handling rules
+      const processedQuestions = await handleDuplicationRules(parsed, existingQuestions);
+      
+      // Collect detailed duplicate information
+      const duplicateInfo: {
+        questionNumber: number;
+        questionPreview: string;
+        type: 'database' | 'internal' | 'both';
+        action: 'removed' | 'kept';
+      }[] = [];
+      
+      const validQuestions: any[] = [];
+
+      processedQuestions.forEach((question, index) => {
+        const questionNumber = index + 1;
+        const questionPreview = question.question?.substring(0, 60) + (question.question?.length > 60 ? '...' : '');
+        
+        if (question.status === 'removed_db_duplicate') {
+          duplicateInfo.push({
+            questionNumber,
+            questionPreview,
+            type: 'database',
+            action: 'removed'
+          });
+        } else if (question.status === 'removed_parsed_duplicate') {
+          duplicateInfo.push({
+            questionNumber,
+            questionPreview,
+            type: 'internal',
+            action: 'removed'
+          });
+        } else if (question.status === 'removed_both_duplicate') {
+          duplicateInfo.push({
+            questionNumber,
+            questionPreview,
+            type: 'both',
+            action: 'removed'
+          });
+        } else {
+          validQuestions.push(question);
+        }
+      });
+
+      const totalDuplicatesRemoved = duplicateInfo.length;
 
       setTextValidation({
         isValid: errors.length === 0,
-        questionCount: validQuestions,
-        duplicateCount: duplicateCount + dbDuplicates,
-        errors
+        questionCount: validQuestions.length,
+        duplicateCount: totalDuplicatesRemoved,
+        errors: errors,
+        duplicateInfo: duplicateInfo
       });
 
-      if (errors.length === 0 && parsed.length > 0) {
-        processImportData(parsed);
+      if (errors.length === 0 && validQuestions.length > 0) {
+        processImportData(validQuestions);
       }
       
     } catch (error) {
+      console.error('Validation error:', error);
       setTextValidation({
         isValid: false,
         questionCount: 0,
         duplicateCount: 0,
-        errors: ['Failed to parse text format']
+        errors: ['Failed to parse text format or check duplicates'],
+        duplicateInfo: []
       });
     }
   };
 
-  const handleTextImport = () => {
+  const handleDuplicationRules = async (parsedQuestions: any[], existingQuestions: any[]) => {
+    const existingQuestionTexts = new Set(
+      existingQuestions.map(q => q.question?.toLowerCase().trim()).filter(Boolean)
+    );
+    
+    const processedQuestions: any[] = [];
+    const seenInParsed = new Map(); // Track questions we've seen in parsed data
+    
+    for (let i = 0; i < parsedQuestions.length; i++) {
+      const question = parsedQuestions[i];
+      const questionText = question.question?.toLowerCase().trim();
+      
+      if (!questionText) {
+        processedQuestions.push(question);
+        continue;
+      }
+      
+      const isInDatabase = existingQuestionTexts.has(questionText);
+      const isInParsed = seenInParsed.has(questionText);
+      
+      // Rule c: If question is duplicate in both database and parsed data, completely remove
+      if (isInDatabase && isInParsed) {
+        question.status = 'removed_both_duplicate';
+        processedQuestions.push(question);
+        continue;
+      }
+      
+      // Rule a: If question is duplicate from database only, remove but allow user to know
+      if (isInDatabase && !isInParsed) {
+        question.status = 'removed_db_duplicate';
+        processedQuestions.push(question);
+        seenInParsed.set(questionText, i);
+        continue;
+      }
+      
+      // Rule b: If question is duplicate in parsed data only, keep first occurrence
+      if (!isInDatabase && isInParsed) {
+        question.status = 'removed_parsed_duplicate';
+        processedQuestions.push(question);
+        continue;
+      }
+      
+      // No duplicate, keep the question
+      seenInParsed.set(questionText, i);
+      processedQuestions.push(question);
+    }
+    
+    return processedQuestions;
+  };
+
+  const handleTextImport = async () => {
     if (!pastedText.trim()) {
       toast.error('Please paste some text to import');
       return;
     }
-    validatePastedText(pastedText);
+    await validatePastedText(pastedText);
   };
 
   const processImportData = (data: any[]) => {
@@ -1028,7 +1208,7 @@ You can paste either:
                                 <strong>✓ Valid Format</strong>
                                 <p className="text-sm mt-1">
                                   Found {textValidation.questionCount} valid questions
-                                  {textValidation.duplicateCount > 0 && ` (${textValidation.duplicateCount} duplicates detected)`}
+                                  {textValidation.duplicateCount > 0 && ` (${textValidation.duplicateCount} duplicates handled)`}
                                 </p>
                               </div>
                             ) : (
@@ -1040,8 +1220,48 @@ You can paste either:
                               </div>
                             )}
                           </div>
+                          
+                          {/* Display duplicate information */}
+                          {textValidation.duplicateInfo && textValidation.duplicateInfo.length > 0 && (
+                            <div className="mt-4 border-t pt-4">
+                              <h4 className="font-medium text-gray-900 mb-2">Duplicate Questions Handled:</h4>
+                              <div className="space-y-3 text-sm">
+                                {textValidation.duplicateInfo.map((dup, index) => (
+                                  <div key={index} className={`p-3 rounded-md ${
+                                    dup.type === 'database' ? 'bg-yellow-50 border border-yellow-200' :
+                                    dup.type === 'internal' ? 'bg-blue-50 border border-blue-200' :
+                                    'bg-orange-50 border border-orange-200'
+                                  }`}>
+                                    <div className="flex items-start justify-between mb-2">
+                                      <span className="font-medium">
+                                        Question #{dup.questionNumber}
+                                      </span>
+                                      <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                        dup.type === 'database' ? 'bg-yellow-100 text-yellow-800' :
+                                        dup.type === 'internal' ? 'bg-blue-100 text-blue-800' :
+                                        'bg-orange-100 text-orange-800'
+                                      }`}>
+                                        {dup.type === 'database' ? 'Exists in DB' : 
+                                         dup.type === 'internal' ? 'Duplicate in Import' : 'Both'}
+                                      </span>
+                                    </div>
+                                    <p className="text-gray-700 mb-2">"{dup.questionPreview}"</p>
+                                    <p className={`text-xs ${
+                                      dup.type === 'database' ? 'text-yellow-700' :
+                                      dup.type === 'internal' ? 'text-blue-700' :
+                                      'text-orange-700'
+                                    }`}>
+                                      {dup.action === 'removed' ? '→ Removed from import' : '→ Kept (first occurrence)'}
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          
                           {textValidation.errors.length > 0 && (
-                            <div className="text-sm space-y-1">
+                            <div className="text-sm space-y-1 mt-4 border-t pt-4">
+                              <h4 className="font-medium text-red-800 mb-2">Validation Errors:</h4>
                               {textValidation.errors.map((error, index) => (
                                 <div key={index} className="text-red-700">• {error}</div>
                               ))}

@@ -100,12 +100,66 @@ export default function CreateQuestionPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Get the actual choices (skip the first empty element)
+    // Enhanced validation similar to bulk import
     const actualChoices = formData.choices.slice(1).filter(choice => choice.trim() !== '');
     
-    if (!formData.question.trim() || !formData.correctAnswer.trim() || !formData.level_id.trim() || actualChoices.length < 2) {
-      toast.error('Please fill in all required fields (question, level, correct answer, and at least 2 other choices)');
+    // Basic field validation
+    if (!formData.question.trim()) {
+      toast.error('Question text is required');
       return;
+    }
+    
+    if (!formData.level_id.trim()) {
+      toast.error('Please select a level');
+      return;
+    }
+    
+    if (!formData.correctAnswer.trim()) {
+      toast.error('Correct answer is required');
+      return;
+    }
+    
+    if (actualChoices.length < 2) {
+      toast.error('At least 2 additional choices are required');
+      return;
+    }
+    
+    // Validate correct answer is in choices
+    const allChoices = [formData.correctAnswer, ...actualChoices];
+    if (!allChoices.includes(formData.correctAnswer)) {
+      toast.error('Correct answer must be one of the provided choices');
+      return;
+    }
+    
+    // Check for duplicates in existing questions
+    try {
+      const existingQuestions = await questionsApi.getAll({ 
+        topicId, 
+        subtopicId, 
+        categoryId, 
+        limit: 1000 
+      });
+      
+      let questionsArray: any[] = [];
+      if (existingQuestions?.data && Array.isArray(existingQuestions.data)) {
+        questionsArray = existingQuestions.data;
+      } else if (existingQuestions?.items && Array.isArray(existingQuestions.items)) {
+        questionsArray = existingQuestions.items;
+      } else if (Array.isArray(existingQuestions)) {
+        questionsArray = existingQuestions;
+      }
+      
+      const existingQuestionTexts = questionsArray.map(q => q.question?.toLowerCase().trim()).filter(Boolean);
+      const currentQuestionText = formData.question.toLowerCase().trim();
+      
+      if (existingQuestionTexts.includes(currentQuestionText)) {
+        toast.error('A question with the same text already exists in this category');
+        return;
+      }
+      
+    } catch (error) {
+      console.error('Error checking for duplicates:', error);
+      // Continue with creation if duplicate check fails
     }
 
     try {
@@ -113,10 +167,6 @@ export default function CreateQuestionPage() {
       
       // Get the selected level information
       const selectedLevel = levels.find(level => level.id === formData.level_id);
-      
-      // Create the choices array with correct answer included, filtering out empty choices
-      const otherChoices = formData.choices.slice(1).filter(choice => choice.trim() !== '');
-      const allChoices = [formData.correctAnswer, ...otherChoices];
       
       await questionsApi.create({
         topic_id: topicId,
@@ -136,6 +186,7 @@ export default function CreateQuestionPage() {
       toast.success('Question created successfully');
       router.push(`/topics/${topicId}/subtopics/${subtopicId}/categories/${categoryId}/questions`);
     } catch (error: any) {
+      console.error('Create question error:', error);
       toast.error('Failed to create question');
     } finally {
       setIsSubmitting(false);
