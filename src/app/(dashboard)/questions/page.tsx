@@ -3,9 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import AdminLayout from '@/components/AdminLayout';
-import { Plus, Edit, Trash2, Search, Filter } from 'lucide-react';
-import { Question, Topic, Subtopic } from '@/types';
+import { Plus, Edit, Trash2, Search, BookOpen, ChevronRight, Layers, Target } from 'lucide-react';
+import { Question, Topic, Subtopic, Category } from '@/types';
 import { apiService } from '@/services/apiService';
+import { categoriesApi } from '@/services/api';
 import toast from 'react-hot-toast';
 
 interface Level {
@@ -13,6 +14,7 @@ interface Level {
   level: number;
   name: string;
   subtopic_id: string;
+  category_id: string;
 }
 
 // Helper function to parse levels response
@@ -34,17 +36,20 @@ export default function QuestionsPage() {
   const searchParams = useSearchParams();
   const urlTopic = searchParams?.get('topic');
   const urlSubtopic = searchParams?.get('subtopic');
+  const urlCategory = searchParams?.get('category');
   
   const [questions, setQuestions] = useState<Question[]>([]);
   const [questionsByDifficulty, setQuestionsByDifficulty] = useState<{[key: string]: Question[]}>({});
   const [filteredQuestions, setFilteredQuestions] = useState<Question[]>([]);
   const [topics, setTopics] = useState<Topic[]>([]);
   const [subtopics, setSubtopics] = useState<Subtopic[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [levels, setLevels] = useState<Level[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTopic, setSelectedTopic] = useState(urlTopic || '');
   const [selectedSubtopic, setSelectedSubtopic] = useState(urlSubtopic || '');
+  const [selectedCategory, setSelectedCategory] = useState(urlCategory || '');
   const [selectedLevel, setSelectedLevel] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -56,16 +61,16 @@ export default function QuestionsPage() {
 
   useEffect(() => {
     loadData();
-  }, [selectedTopic, selectedSubtopic]);
+  }, [selectedTopic, selectedSubtopic, selectedCategory]);
 
-  // Reset selected level when subtopic changes
+  // Reset selected level when category changes
   useEffect(() => {
     setSelectedLevel('');
-  }, [selectedSubtopic]);
+  }, [selectedCategory]);
 
   useEffect(() => {
     filterQuestions();
-  }, [questions, searchTerm, selectedTopic, selectedSubtopic, selectedLevel]);
+  }, [questions, searchTerm, selectedTopic, selectedSubtopic, selectedCategory, selectedLevel]);
 
   // Helper function to load all questions across multiple pages
   const loadAllQuestions = async (): Promise<Question[]> => {
@@ -79,6 +84,7 @@ export default function QuestionsPage() {
         const params = new URLSearchParams();
         if (selectedTopic) params.append('topicId', selectedTopic);
         if (selectedSubtopic) params.append('subtopicId', selectedSubtopic);
+        if (selectedCategory) params.append('categoryId', selectedCategory);
         params.append('page', currentPage.toString());
         params.append('limit', '100');
         
@@ -169,10 +175,30 @@ export default function QuestionsPage() {
         setSubtopics([]);
       }
 
-      // Load levels based on selected subtopic or all levels
+      // Load categories based on selected topic and subtopic
+      try {
+        const categoriesResponse = await categoriesApi.getAll();
+        
+        // Filter categories based on selected filters
+        let filteredCategories = categoriesResponse.data || [];
+        if (selectedTopic) {
+          filteredCategories = filteredCategories.filter((cat: Category) => cat.topic_id === selectedTopic);
+        }
+        if (selectedSubtopic) {
+          filteredCategories = filteredCategories.filter((cat: Category) => cat.subtopic_id === selectedSubtopic);
+        }
+        
+        setCategories(filteredCategories);
+      } catch (error) {
+        console.error('Error loading categories:', error);
+        setCategories([]);
+      }
+
+      // Load levels based on selected subtopic and category
       try {
         const levelsParams = new URLSearchParams();
         if (selectedSubtopic) levelsParams.append('subtopicId', selectedSubtopic);
+        if (selectedCategory) levelsParams.append('categoryId', selectedCategory);
         
         const levelsQueryString = levelsParams.toString();
         const levelsUrl = `/admin/levels${levelsQueryString ? `?${levelsQueryString}` : ''}`;
@@ -193,6 +219,7 @@ export default function QuestionsPage() {
       setQuestionsByDifficulty({});
       setTopics([]);
       setSubtopics([]);
+      setCategories([]);
       setLevels([]);
     } finally {
       setIsLoading(false);
@@ -215,7 +242,13 @@ export default function QuestionsPage() {
     
     if (selectedSubtopic) {
       filtered = filtered.filter(q => q.subtopic_id === selectedSubtopic);
-    }    if (selectedLevel) {
+    }
+    
+    if (selectedCategory) {
+      filtered = filtered.filter(q => q.category_id === selectedCategory);
+    }
+    
+    if (selectedLevel) {
       filtered = filtered.filter(q => q.level === parseInt(selectedLevel));
     }
 
@@ -252,10 +285,16 @@ export default function QuestionsPage() {
     return subtopic?.name || 'Unknown';
   };
 
+  const getCategoryName = (categoryId: string) => {
+    const category = categories.find(c => c.id === categoryId);
+    return category?.name || 'Unknown';
+  };
+
   const clearFilters = () => {
     setSearchTerm('');
     setSelectedTopic('');
     setSelectedSubtopic('');
+    setSelectedCategory('');
     setSelectedLevel('');
   };
 
@@ -278,6 +317,46 @@ export default function QuestionsPage() {
           </button>
         </div>
 
+        {/* Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="bg-white p-6 rounded-lg border">
+            <div className="flex items-center">
+              <Target className="h-8 w-8 text-blue-600" />
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Total Questions</p>
+                <p className="text-2xl font-bold text-gray-900">{questions.length}</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white p-6 rounded-lg border">
+            <div className="flex items-center">
+              <BookOpen className="h-8 w-8 text-green-600" />
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Topics</p>
+                <p className="text-2xl font-bold text-gray-900">{topics.length}</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white p-6 rounded-lg border">
+            <div className="flex items-center">
+              <Layers className="h-8 w-8 text-purple-600" />
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Categories</p>
+                <p className="text-2xl font-bold text-gray-900">{categories.length}</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white p-6 rounded-lg border">
+            <div className="flex items-center">
+              <Target className="h-8 w-8 text-orange-600" />
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Filtered</p>
+                <p className="text-2xl font-bold text-gray-900">{filteredQuestions.length}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Filters */}
         <div className="bg-white p-4 rounded-lg shadow space-y-4">
           <div className="flex items-center justify-between">
@@ -290,7 +369,7 @@ export default function QuestionsPage() {
             </button>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
               <input
@@ -307,6 +386,7 @@ export default function QuestionsPage() {
               onChange={(e) => {
                 setSelectedTopic(e.target.value);
                 setSelectedSubtopic(''); // Reset subtopic when topic changes
+                setSelectedCategory(''); // Reset category when topic changes
               }}
               className="block w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
             >
@@ -318,7 +398,10 @@ export default function QuestionsPage() {
             
             <select
               value={selectedSubtopic}
-              onChange={(e) => setSelectedSubtopic(e.target.value)}
+              onChange={(e) => {
+                setSelectedSubtopic(e.target.value);
+                setSelectedCategory(''); // Reset category when subtopic changes
+              }}
               className="block w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
               disabled={!selectedTopic}
             >
@@ -331,10 +414,22 @@ export default function QuestionsPage() {
             </select>
             
             <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="block w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+              disabled={!selectedSubtopic}
+            >
+              <option value="">All Categories</option>
+              {categories.map(category => (
+                <option key={category.id} value={category.id}>{category.name}</option>
+              ))}
+            </select>
+            
+            <select
               value={selectedLevel}
               onChange={(e) => setSelectedLevel(e.target.value)}
               className="block w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-              disabled={!selectedSubtopic}
+              disabled={!selectedCategory}
             >
               <option value="">All Levels</option>
               {Array.isArray(levels) && levels
@@ -350,7 +445,7 @@ export default function QuestionsPage() {
             </select>
 
             <div className="text-sm text-gray-600 flex items-center">
-              Showing {filteredQuestions.length} of {questions.length} questions
+              Showing {filteredQuestions.length} of {questions.length}
             </div>
           </div>
         </div>
@@ -369,7 +464,7 @@ export default function QuestionsPage() {
             {filteredQuestions.length === 0 ? (
               <div className="p-6 text-center">
                 <p className="text-gray-500">
-                  {searchTerm || selectedTopic || selectedSubtopic || selectedLevel
+                  {searchTerm || selectedTopic || selectedSubtopic || selectedCategory || selectedLevel
                     ? 'No questions match your filters.'
                     : 'No questions found. Create your first question!'
                   }
@@ -377,8 +472,8 @@ export default function QuestionsPage() {
               </div>
             ) : (
               <>
-                {/* Show grouped view when filtering by topic/subtopic */}
-                {(urlTopic || urlSubtopic) && Object.keys(questionsByDifficulty).length > 0 ? (
+                {/* Show grouped view when filtering */}
+                {(urlTopic || urlSubtopic || urlCategory) && Object.keys(questionsByDifficulty).length > 0 ? (
                   <div className="space-y-6 p-6">
                     <div className="flex items-center justify-between">
                       <h3 className="text-lg font-medium text-gray-900">
@@ -417,10 +512,18 @@ export default function QuestionsPage() {
                                     <p className="text-sm font-medium text-gray-900 mb-2">
                                       {question.question}
                                     </p>
-                                    <div className="flex items-center space-x-4 text-xs text-gray-500">
-                                      <span>Topic: {getTopicName(question.topic_id)}</span>
-                                      <span>•</span>
-                                      <span>Subtopic: {getSubtopicName(question.subtopic_id)}</span>
+                                    <div className="flex items-center space-x-2 text-xs text-gray-500">
+                                      <BookOpen className="h-3 w-3" />
+                                      <span>{getTopicName(question.topic_id)}</span>
+                                      <ChevronRight className="h-3 w-3" />
+                                      <span>{getSubtopicName(question.subtopic_id)}</span>
+                                      {question.category_id && (
+                                        <>
+                                          <ChevronRight className="h-3 w-3" />
+                                          <Layers className="h-3 w-3" />
+                                          <span>{getCategoryName(question.category_id)}</span>
+                                        </>
+                                      )}
                                       {question.attempts && (
                                         <>
                                           <span>•</span>
@@ -461,7 +564,7 @@ export default function QuestionsPage() {
                             Question
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Topic / Subtopic
+                            Hierarchy
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Level
@@ -485,12 +588,19 @@ export default function QuestionsPage() {
                                 {question.question}
                               </div>
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm text-gray-900">
-                                {getTopicName(question.topic_id)}
-                              </div>
-                              <div className="text-sm text-gray-500">
-                                {getSubtopicName(question.subtopic_id)}
+                            <td className="px-6 py-4">
+                              <div className="flex items-center text-xs text-gray-600">
+                                <BookOpen className="h-3 w-3 mr-1" />
+                                <span className="truncate max-w-20">{getTopicName(question.topic_id)}</span>
+                                <ChevronRight className="h-3 w-3 mx-1" />
+                                <span className="truncate max-w-20">{getSubtopicName(question.subtopic_id)}</span>
+                                {question.category_id && (
+                                  <>
+                                    <ChevronRight className="h-3 w-3 mx-1" />
+                                    <Layers className="h-3 w-3 mr-1" />
+                                    <span className="truncate max-w-20">{getCategoryName(question.category_id)}</span>
+                                  </>
+                                )}
                               </div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
@@ -545,6 +655,7 @@ export default function QuestionsPage() {
         title="Add Question"
         topics={topics}
         subtopics={subtopics}
+        categories={categories}
       />
 
       {/* Edit Question Modal */}
@@ -558,6 +669,7 @@ export default function QuestionsPage() {
         title="Edit Question"
         topics={topics}
         subtopics={subtopics}
+        categories={categories}
         question={editingQuestion}
       />
     </AdminLayout>
@@ -572,26 +684,30 @@ interface QuestionModalProps {
   title: string;
   topics: Topic[];
   subtopics: Subtopic[];
+  categories: Category[];
   question?: Question | null;
 }
 
-function QuestionModal({ isOpen, onClose, onSave, title, topics, subtopics, question }: QuestionModalProps) {
+function QuestionModal({ isOpen, onClose, onSave, title, topics, subtopics, categories, question }: QuestionModalProps) {
   const [questionText, setQuestionText] = useState('');
   const [options, setOptions] = useState(['', '', '', '']);
   const [correctAnswer, setCorrectAnswer] = useState('');
   const [explanation, setExplanation] = useState('');
   const [topicId, setTopicId] = useState('');
   const [subtopicId, setSubtopicId] = useState('');
+  const [categoryId, setCategoryId] = useState('');
   const [level, setLevel] = useState(1);
   const [levels, setLevels] = useState<any[]>([]);
   const [levelId, setLevelId] = useState('');
   const [modalSubtopics, setModalSubtopics] = useState<Subtopic[]>([]);
+  const [modalCategories, setModalCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Initialize modal subtopics with the passed subtopics
+  // Initialize modal data
   useEffect(() => {
     setModalSubtopics(subtopics);
-  }, [subtopics]);
+    setModalCategories(categories);
+  }, [subtopics, categories]);
 
   useEffect(() => {
     if (question) {
@@ -603,6 +719,7 @@ function QuestionModal({ isOpen, onClose, onSave, title, topics, subtopics, ques
       setExplanation(question.explanation || '');
       setTopicId(question.topic_id);
       setSubtopicId(question.subtopic_id);
+      setCategoryId(question.category_id || '');
       setLevel(question.level);
       setLevelId(question.level_id || '');
     } else {
@@ -612,6 +729,7 @@ function QuestionModal({ isOpen, onClose, onSave, title, topics, subtopics, ques
       setExplanation('');
       setTopicId('');
       setSubtopicId('');
+      setCategoryId('');
       setLevel(1);
       setLevelId('');
       setLevels([]);
@@ -624,7 +742,6 @@ function QuestionModal({ isOpen, onClose, onSave, title, topics, subtopics, ques
       if (topicId) {
         try {
           const subtopicsResponse = await apiService.get(`/admin/topics/${topicId}/subtopics`);
-          // Handle different response formats
           let subtopicsData = [];
           if (subtopicsResponse?.data && Array.isArray(subtopicsResponse.data)) {
             subtopicsData = subtopicsResponse.data;
@@ -636,7 +753,6 @@ function QuestionModal({ isOpen, onClose, onSave, title, topics, subtopics, ques
             subtopicsData = subtopicsResponse;
           }
           
-          // Update the modal's local subtopics state
           setModalSubtopics(subtopicsData);
         } catch (error) {
           console.error('Error loading subtopics for modal:', error);
@@ -646,16 +762,35 @@ function QuestionModal({ isOpen, onClose, onSave, title, topics, subtopics, ques
     };
 
     loadSubtopics();
+    setCategoryId(''); // Reset category when topic changes
   }, [topicId]);
 
-  // Load levels when subtopic changes
+  // Load categories when subtopic changes
   useEffect(() => {
-    const loadLevels = async () => {
+    const loadCategories = async () => {
       if (subtopicId) {
         try {
-          const levelsResponse = await apiService.get(`/admin/levels?subtopicId=${subtopicId}`);
-          
-          // Use helper function to parse response
+          const categoriesResponse = await categoriesApi.getAll();
+          const filteredCategories = (categoriesResponse.data || []).filter((cat: Category) => 
+            cat.topic_id === topicId && cat.subtopic_id === subtopicId
+          );
+          setModalCategories(filteredCategories);
+        } catch (error) {
+          console.error('Error loading categories for modal:', error);
+          setModalCategories([]);
+        }
+      }
+    };
+
+    loadCategories();
+  }, [topicId, subtopicId]);
+
+  // Load levels when category changes
+  useEffect(() => {
+    const loadLevels = async () => {
+      if (categoryId) {
+        try {
+          const levelsResponse = await apiService.get(`/admin/levels?categoryId=${categoryId}`);
           const levelsData = parseLevelsResponse(levelsResponse);
           setLevels(levelsData);
           
@@ -677,7 +812,7 @@ function QuestionModal({ isOpen, onClose, onSave, title, topics, subtopics, ques
     };
 
     loadLevels();
-  }, [subtopicId, question]);
+  }, [categoryId, question]);
 
   const handleOptionChange = (index: number, value: string) => {
     const newOptions = [...options];
@@ -688,7 +823,7 @@ function QuestionModal({ isOpen, onClose, onSave, title, topics, subtopics, ques
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!questionText.trim() || !topicId || !subtopicId || !correctAnswer.trim()) {
+    if (!questionText.trim() || !topicId || !subtopicId || !categoryId || !correctAnswer.trim()) {
       toast.error('Please fill in all required fields');
       return;
     }
@@ -709,7 +844,7 @@ function QuestionModal({ isOpen, onClose, onSave, title, topics, subtopics, ques
       const difficulty = level <= 2 ? 'easy' : level >= 5 ? 'hard' : 'medium';
       
       // Create level_id if not provided (for new questions)
-      const finalLevelId = levelId || `level_${level}_${subtopicId}`;
+      const finalLevelId = levelId || `level_${level}_${categoryId}`;
 
       const questionData = {
         question: questionText.trim(),
@@ -718,6 +853,7 @@ function QuestionModal({ isOpen, onClose, onSave, title, topics, subtopics, ques
         explanation: explanation.trim(),
         topic_id: topicId,
         subtopic_id: subtopicId,
+        category_id: categoryId,
         level_id: finalLevelId,
         difficulty
       };
@@ -743,6 +879,9 @@ function QuestionModal({ isOpen, onClose, onSave, title, topics, subtopics, ques
   if (!isOpen) return null;
 
   const availableSubtopics = Array.isArray(modalSubtopics) ? modalSubtopics.filter(s => s.topic_id === topicId) : [];
+  const availableCategories = Array.isArray(modalCategories) ? modalCategories.filter(c => 
+    c.topic_id === topicId && c.subtopic_id === subtopicId
+  ) : [];
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -750,7 +889,7 @@ function QuestionModal({ isOpen, onClose, onSave, title, topics, subtopics, ques
         <h2 className="text-lg font-medium text-gray-900 mb-4">{title}</h2>
         
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label htmlFor="topicId" className="block text-sm font-medium text-gray-700">
                 Topic *
@@ -761,6 +900,7 @@ function QuestionModal({ isOpen, onClose, onSave, title, topics, subtopics, ques
                 onChange={(e) => {
                   setTopicId(e.target.value);
                   setSubtopicId(''); // Reset subtopic when topic changes
+                  setCategoryId(''); // Reset category when topic changes
                   setLevelId(''); // Reset level when topic changes
                 }}
                 className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
@@ -781,7 +921,10 @@ function QuestionModal({ isOpen, onClose, onSave, title, topics, subtopics, ques
               <select
                 id="subtopicId"
                 value={subtopicId}
-                onChange={(e) => setSubtopicId(e.target.value)}
+                onChange={(e) => {
+                  setSubtopicId(e.target.value);
+                  setCategoryId(''); // Reset category when subtopic changes
+                }}
                 className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 disabled={isLoading || !topicId}
                 required
@@ -792,51 +935,72 @@ function QuestionModal({ isOpen, onClose, onSave, title, topics, subtopics, ques
                 ))}
               </select>
             </div>
+
+            <div>
+              <label htmlFor="categoryId" className="block text-sm font-medium text-gray-700">
+                Category *
+              </label>
+              <select
+                id="categoryId"
+                value={categoryId}
+                onChange={(e) => setCategoryId(e.target.value)}
+                className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                disabled={isLoading || !subtopicId}
+                required
+              >
+                <option value="">Select a category</option>
+                {Array.isArray(availableCategories) && availableCategories.map(category => (
+                  <option key={category.id} value={category.id}>{category.name}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
-          <div>
-            <label htmlFor="levelId" className="block text-sm font-medium text-gray-700">
-              Level (Optional - will be auto-created if not selected)
-            </label>
-            <select
-              id="levelId"
-              value={levelId}
-              onChange={(e) => setLevelId(e.target.value)}
-              className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              disabled={isLoading || !subtopicId}
-            >
-              <option value="">Auto-create level {level}</option>
-              {levels.map((levelOption: any) => (
-                <option key={levelOption.id} value={levelOption.id}>
-                  {levelOption.name || `Level ${levelOption.level}`}
-                </option>
-              ))}
-            </select>
-            {levels.length === 0 && subtopicId && (
-              <p className="mt-1 text-sm text-gray-500">
-                No existing levels found. A new level will be created automatically.
-              </p>
-            )}
-          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="levelId" className="block text-sm font-medium text-gray-700">
+                Level (Optional - will be auto-created if not selected)
+              </label>
+              <select
+                id="levelId"
+                value={levelId}
+                onChange={(e) => setLevelId(e.target.value)}
+                className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                disabled={isLoading || !categoryId}
+              >
+                <option value="">Auto-create level {level}</option>
+                {levels.map((levelOption: any) => (
+                  <option key={levelOption.id} value={levelOption.id}>
+                    {levelOption.name || `Level ${levelOption.level}`}
+                  </option>
+                ))}
+              </select>
+              {levels.length === 0 && categoryId && (
+                <p className="mt-1 text-sm text-gray-500">
+                  No existing levels found. A new level will be created automatically.
+                </p>
+              )}
+            </div>
 
-          <div>
-            <label htmlFor="level" className="block text-sm font-medium text-gray-700">
-              Level Number *
-            </label>
-            <select
-              id="level"
-              value={level}
-              onChange={(e) => setLevel(parseInt(e.target.value))}
-              className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              disabled={isLoading}
-              required
-            >
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(levelNum => (
-                <option key={levelNum} value={levelNum}>
-                  Level {levelNum} ({levelNum <= 2 ? 'Easy' : levelNum >= 5 ? 'Hard' : 'Medium'})
-                </option>
-              ))}
-            </select>
+            <div>
+              <label htmlFor="level" className="block text-sm font-medium text-gray-700">
+                Level Number *
+              </label>
+              <select
+                id="level"
+                value={level}
+                onChange={(e) => setLevel(parseInt(e.target.value))}
+                className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                disabled={isLoading}
+                required
+              >
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(levelNum => (
+                  <option key={levelNum} value={levelNum}>
+                    Level {levelNum} ({levelNum <= 2 ? 'Easy' : levelNum >= 5 ? 'Hard' : 'Medium'})
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
           
           <div>

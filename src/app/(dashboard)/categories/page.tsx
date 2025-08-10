@@ -1,42 +1,39 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import AdminLayout from '@/components/AdminLayout';
-import { levelsApi, topicsApi, subtopicsApi, categoriesApi } from '@/services/api';
-import { Level, Topic, Subtopic, Category, PaginatedResponse } from '@/types';
+import { categoriesApi, topicsApi, subtopicsApi } from '@/services/api';
+import { Category, Topic, Subtopic, PaginatedResponse } from '@/types';
 import {
   Plus,
   Search,
+  Filter,
   Edit,
   Trash2,
   Eye,
   EyeOff,
-  Target,
+  Layers,
   BookOpen,
-  ChevronRight,
-  Layers
+  ChevronRight
 } from 'lucide-react';
 
-export default function LevelsPage() {
+export default function CategoriesPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const [levels, setLevels] = useState<Level[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [topics, setTopics] = useState<Topic[]>([]);
   const [subtopics, setSubtopics] = useState<Subtopic[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedTopic, setSelectedTopic] = useState(searchParams?.get('topicId') || '');
-  const [selectedSubtopic, setSelectedSubtopic] = useState(searchParams?.get('subtopicId') || '');
-  const [selectedCategory, setSelectedCategory] = useState(searchParams?.get('categoryId') || '');
+  const [selectedTopic, setSelectedTopic] = useState('');
+  const [selectedSubtopic, setSelectedSubtopic] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   
   const limit = 10;
 
-  const fetchLevels = async () => {
+  const fetchCategories = async () => {
     try {
       setLoading(true);
       const params: any = { 
@@ -45,17 +42,16 @@ export default function LevelsPage() {
         search: searchTerm || undefined
       };
       
-      if (selectedTopic) params.topicId = selectedTopic;
-      if (selectedSubtopic) params.subtopicId = selectedSubtopic;
-      if (selectedCategory) params.categoryId = selectedCategory;
+      if (selectedTopic) params.topic_id = selectedTopic;
+      if (selectedSubtopic) params.subtopic_id = selectedSubtopic;
 
-      const response: PaginatedResponse<Level> = await levelsApi.getAll(params);
-      setLevels(response.data || []);
+      const response: PaginatedResponse<Category> = await categoriesApi.getAll(params);
+      setCategories(response.data || []);
       setTotal(response.total || 0);
       setTotalPages(Math.ceil((response.total || 0) / limit));
     } catch (error) {
-      console.error('Failed to fetch levels:', error);
-      setLevels([]); // Set empty array on error to prevent crashes
+      console.error('Failed to fetch categories:', error);
+      setCategories([]);
       setTotal(0);
       setTotalPages(1);
     } finally {
@@ -69,34 +65,20 @@ export default function LevelsPage() {
       setTopics(response.data || []);
     } catch (error) {
       console.error('Failed to fetch topics:', error);
-      setTopics([]); // Set empty array on error to prevent crashes
+      setTopics([]);
     }
   };
 
   const fetchSubtopics = async () => {
     try {
       const params: any = { limit: 100 };
-      if (selectedTopic) params.topicId = selectedTopic;
+      if (selectedTopic) params.topic_id = selectedTopic;
       
       const response = await subtopicsApi.getAll(params);
       setSubtopics(response.data || []);
     } catch (error) {
       console.error('Failed to fetch subtopics:', error);
-      setSubtopics([]); // Set empty array on error to prevent crashes
-    }
-  };
-
-  const fetchCategories = async () => {
-    try {
-      const params: any = { limit: 100 };
-      if (selectedTopic) params.topicId = selectedTopic;
-      if (selectedSubtopic) params.subtopicId = selectedSubtopic;
-      
-      const response = await categoriesApi.getAll(params);
-      setCategories(response.data || []);
-    } catch (error) {
-      console.error('Failed to fetch categories:', error);
-      setCategories([]); // Set empty array on error to prevent crashes
+      setSubtopics([]);
     }
   };
 
@@ -106,36 +88,29 @@ export default function LevelsPage() {
 
   useEffect(() => {
     fetchSubtopics();
-    setSelectedSubtopic('');
-    setSelectedCategory('');
   }, [selectedTopic]);
 
   useEffect(() => {
     fetchCategories();
-    setSelectedCategory('');
-  }, [selectedTopic, selectedSubtopic]);
-
-  useEffect(() => {
-    fetchLevels();
-  }, [currentPage, searchTerm, selectedTopic, selectedSubtopic, selectedCategory]);
+  }, [currentPage, searchTerm, selectedTopic, selectedSubtopic]);
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this level?')) return;
+    if (!confirm('Are you sure you want to delete this category?')) return;
     
     try {
-      await levelsApi.delete(id);
-      fetchLevels();
+      await categoriesApi.delete(id);
+      fetchCategories();
     } catch (error) {
-      console.error('Failed to delete level:', error);
+      console.error('Failed to delete category:', error);
     }
   };
 
   const handleToggleStatus = async (id: string) => {
     try {
-      await levelsApi.toggleStatus(id);
-      fetchLevels();
+      await categoriesApi.toggleStatus(id);
+      fetchCategories();
     } catch (error) {
-      console.error('Failed to toggle level status:', error);
+      console.error('Failed to toggle category status:', error);
     }
   };
 
@@ -147,25 +122,21 @@ export default function LevelsPage() {
     return subtopics.find(s => s.id === subtopicId)?.name || 'Unknown Subtopic';
   };
 
-  const getCategoryName = (categoryId: string) => {
-    return categories.find(c => c.id === categoryId)?.name || 'Unknown Category';
-  };
-
   return (
     <AdminLayout>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Levels</h1>
-            <p className="text-gray-600 mt-1">Manage levels within categories</p>
+            <h1 className="text-3xl font-bold text-gray-900">Categories</h1>
+            <p className="text-gray-600 mt-1">Manage categories within subtopics</p>
           </div>
           <button
-            onClick={() => router.push('/levels/create')}
+            onClick={() => router.push('/categories/create')}
             className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 transition-colors"
           >
             <Plus className="h-5 w-5" />
-            Add Level
+            Add Category
           </button>
         </div>
 
@@ -173,9 +144,9 @@ export default function LevelsPage() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="bg-white p-6 rounded-lg border">
             <div className="flex items-center">
-              <Target className="h-8 w-8 text-green-600" />
+              <Layers className="h-8 w-8 text-blue-600" />
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Total Levels</p>
+                <p className="text-sm font-medium text-gray-600">Total Categories</p>
                 <p className="text-2xl font-bold text-gray-900">{total}</p>
               </div>
             </div>
@@ -184,12 +155,12 @@ export default function LevelsPage() {
 
         {/* Filters */}
         <div className="bg-white p-6 rounded-lg border">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
               <input
                 type="text"
-                placeholder="Search levels..."
+                placeholder="Search categories..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10 w-full border border-gray-300 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -198,13 +169,16 @@ export default function LevelsPage() {
 
             <select
               value={selectedTopic}
-              onChange={(e) => setSelectedTopic(e.target.value)}
+              onChange={(e) => {
+                setSelectedTopic(e.target.value);
+                setSelectedSubtopic(''); // Reset subtopic when topic changes
+              }}
               className="border border-gray-300 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All Topics</option>
-              {topics.map(topic => (
+              {topics && Array.isArray(topics) ? topics.map(topic => (
                 <option key={topic.id} value={topic.id}>{topic.name}</option>
-              ))}
+              )) : null}
             </select>
 
             <select
@@ -214,21 +188,9 @@ export default function LevelsPage() {
               disabled={!selectedTopic}
             >
               <option value="">All Subtopics</option>
-              {subtopics.map(subtopic => (
+              {subtopics && Array.isArray(subtopics) ? subtopics.map(subtopic => (
                 <option key={subtopic.id} value={subtopic.id}>{subtopic.name}</option>
-              ))}
-            </select>
-
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="border border-gray-300 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              disabled={!selectedSubtopic}
-            >
-              <option value="">All Categories</option>
-              {categories.map(category => (
-                <option key={category.id} value={category.id}>{category.name}</option>
-              ))}
+              )) : null}
             </select>
 
             <button
@@ -236,7 +198,6 @@ export default function LevelsPage() {
                 setSearchTerm('');
                 setSelectedTopic('');
                 setSelectedSubtopic('');
-                setSelectedCategory('');
                 setCurrentPage(1);
               }}
               className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors"
@@ -246,7 +207,7 @@ export default function LevelsPage() {
           </div>
         </div>
 
-        {/* Levels Table */}
+        {/* Categories Table */}
         <div className="bg-white rounded-lg border overflow-hidden">
           {loading ? (
             <div className="flex items-center justify-center py-12">
@@ -259,13 +220,13 @@ export default function LevelsPage() {
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Level
+                        Category
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Hierarchy
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Questions
+                        Levels
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Status
@@ -276,21 +237,21 @@ export default function LevelsPage() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {levels.map((level) => (
-                      <tr key={level.id} className="hover:bg-gray-50">
+                    {categories && Array.isArray(categories) ? categories.map((category) => (
+                      <tr key={category.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">
                             <div className="flex-shrink-0">
-                              <div className="h-10 w-10 bg-green-100 rounded-lg flex items-center justify-center">
-                                <Target className="h-6 w-6 text-green-600" />
+                              <div className="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                                <Layers className="h-6 w-6 text-blue-600" />
                               </div>
                             </div>
                             <div className="ml-4">
                               <div className="text-sm font-medium text-gray-900">
-                                Level {level.level}
+                                {category.name}
                               </div>
                               <div className="text-sm text-gray-500 max-w-xs truncate">
-                                {level.name || level.description || 'No description'}
+                                {category.description}
                               </div>
                             </div>
                           </div>
@@ -298,60 +259,57 @@ export default function LevelsPage() {
                         <td className="px-6 py-4">
                           <div className="flex items-center text-sm text-gray-600">
                             <BookOpen className="h-4 w-4 mr-1" />
-                            {getTopicName(level.topic_id)}
+                            {getTopicName(category.topic_id)}
                             <ChevronRight className="h-4 w-4 mx-1" />
-                            {getSubtopicName(level.subtopic_id)}
-                            <ChevronRight className="h-4 w-4 mx-1" />
-                            <Layers className="h-4 w-4 mr-1" />
-                            {getCategoryName(level.category_id)}
+                            {getSubtopicName(category.subtopic_id)}
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm text-gray-900">
-                            {level.totalQuestions || 0} total
+                            {category.totalLevels || 0} levels
                           </div>
                           <div className="text-sm text-gray-500">
-                            Pass: {level.passingScore || 80}%
+                            {category.questionCount || 0} questions
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span
                             className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                              level.isActive
+                              category.isActive
                                 ? 'bg-green-100 text-green-800'
                                 : 'bg-red-100 text-red-800'
                             }`}
                           >
-                            {level.isActive ? 'Active' : 'Inactive'}
+                            {category.isActive ? 'Active' : 'Inactive'}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                           <div className="flex items-center justify-end space-x-2">
                             <button
-                              onClick={() => router.push(`/levels/${level.id}`)}
+                              onClick={() => router.push(`/categories/${category.id}`)}
                               className="text-blue-600 hover:text-blue-900"
                               title="View Details"
                             >
                               <Eye className="h-4 w-4" />
                             </button>
                             <button
-                              onClick={() => router.push(`/levels/${level.id}/edit`)}
+                              onClick={() => router.push(`/categories/${category.id}/edit`)}
                               className="text-green-600 hover:text-green-900"
                               title="Edit"
                             >
                               <Edit className="h-4 w-4" />
                             </button>
                             <button
-                              onClick={() => handleToggleStatus(level.id)}
+                              onClick={() => handleToggleStatus(category.id)}
                               className={`${
-                                level.isActive ? 'text-orange-600 hover:text-orange-900' : 'text-green-600 hover:text-green-900'
+                                category.isActive ? 'text-orange-600 hover:text-orange-900' : 'text-green-600 hover:text-green-900'
                               }`}
-                              title={level.isActive ? 'Deactivate' : 'Activate'}
+                              title={category.isActive ? 'Deactivate' : 'Activate'}
                             >
-                              {level.isActive ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                              {category.isActive ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                             </button>
                             <button
-                              onClick={() => handleDelete(level.id)}
+                              onClick={() => handleDelete(category.id)}
                               className="text-red-600 hover:text-red-900"
                               title="Delete"
                             >
@@ -360,7 +318,13 @@ export default function LevelsPage() {
                           </div>
                         </td>
                       </tr>
-                    ))}
+                    )) : (
+                      <tr>
+                        <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                          {loading ? 'Loading categories...' : 'No categories found'}
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>

@@ -2,106 +2,26 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import AdminLayout from '@/components  const downloadExcelTemplate = () => {
-    // Create a sample Excel template
-    const template = [
-      {
-        level: 1,
-        question: "Sample question here?",
-        option_a: "First option",
-        option_b: "Second option", 
-        option_c: "Third option",
-        option_d: "Fourth option",
-        correct_answer: "A",
-        explanation: "Explanation for the correct answer"
-      },
-      {
-        level: 2,
-        question: "Another sample question?",
-        option_a: "Option A",
-        option_b: "Option B",
-        option_c: "Option C", 
-        option_d: "Option D",
-        correct_answer: "B",
-        explanation: "Why this answer is correct"
-      }
-    ];
-
-    // Convert to CSV
-    const headers = Object.keys(template[0]);
-    const csvContent = [
-      headers.join(','),
-      ...template.map(row => 
-        headers.map(header => `"${row[header as keyof typeof row]}"`).join(',')
-      )
-    ].join('
-');
-
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'questions_template.csv';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
-  };inLayout';
-import { ArrowLeft, Plus, Download, Upload, FileSpreadsheet, Edit, Trash2, Target } from 'lucide-react';
+import AdminLayout from '@/components/AdminLayout';
+import { ArrowLeft, Plus, Edit, Trash2, Layers, BookOpen, ChevronRight } from 'lucide-react';
+import { Topic, Subtopic, Category } from '@/types';
 import { apiService } from '@/services/apiService';
+import { categoriesApi } from '@/services/api';
 import toast from 'react-hot-toast';
 
-interface Question {
-  id: string;
-  question: string;
-  options: string[];
-  correctAnswer: number;
-  explanation?: string;
-  difficulty: string;
-  level: number;
-  topic_id: string;
-  subtopic_id: string;
-  level_id?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface Level {
-  id: string;
-  level: number;
-  name: string;
-  description: string;
-  subtopic_id: string;
-  topic_id: string;
-}
-
-interface Topic {
-  id: string;
-  name: string;
-}
-
-interface Subtopic {
-  id: string;
-  name: string;
-  description: string;
-  topic_id: string;
-}
-
-export default function SubtopicQuestionsPage() {
+export default function SubtopicCategoriesPage() {
   const params = useParams();
   const router = useRouter();
-  const topicId = params.id as string;
-  const subtopicId = params.subtopicId as string;
+  const topicId = params?.id as string;
+  const subtopicId = params?.subtopicId as string;
   
   const [topic, setTopic] = useState<Topic | null>(null);
   const [subtopic, setSubtopic] = useState<Subtopic | null>(null);
-  const [questions, setQuestions] = useState<Question[]>([]);
-  const [levels, setLevels] = useState<Level[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [showBulkImportModal, setShowBulkImportModal] = useState(false);
-  const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
-  const [selectedLevel, setSelectedLevel] = useState('');
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
 
   useEffect(() => {
     if (topicId && subtopicId) {
@@ -112,24 +32,67 @@ export default function SubtopicQuestionsPage() {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [topicData, subtopicData, questionsData, levelsData] = await Promise.all([
+      console.log('🔍 Loading categories data with params:', { topicId, subtopicId });
+      
+      const [topicData, subtopicData, categoriesData] = await Promise.all([
         apiService.get(`/admin/topics/${topicId}`),
         apiService.get(`/admin/subtopics/${subtopicId}`),
-        apiService.get(`/admin/questions?subtopicId=${subtopicId}`),
+        categoriesApi.getAll({ topic_id: topicId, subtopic_id: subtopicId })
+      ]);
+      
+      console.log('📊 API Responses:', { 
+        topicData: topicData?.topic || topicData,
+        subtopicData: subtopicData?.subtopic || subtopicData,
+        categoriesData 
+      });
+      
+      // Handle topic data
+      setTopic(topicData?.topic || topicData);
+      
+      // Handle subtopic data
+      setSubtopic(subtopicData?.subtopic || subtopicData);
+      
+      // Handle categories data
+      const categoryList = categoriesData.data || categoriesData || [];
+      console.log('🏷️ Setting categories:', categoryList);
+      setCategories(categoryList);
+    } catch (error: any) {
+      console.error('Error loading data:', error);
+      toast.error('Failed to load data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+        return levelNumber === selectedLevel;
+      });
+      setFilteredQuestions(filtered);
+    }
+    // Reset pagination when filter changes
+    setCurrentPage(1);
+  }, [questions, selectedLevel]);
+
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      const [topicData, subtopicData, levelsData] = await Promise.all([
+        apiService.get(`/admin/topics/${topicId}`),
+        apiService.get(`/admin/subtopics/${subtopicId}`),
         apiService.get(`/admin/levels?subtopicId=${subtopicId}`)
       ]);
+      
+      // Load all questions with pagination support
+      const allQuestions = await loadAllQuestions(subtopicId);
       
       setTopic(topicData?.topic || topicData);
       setSubtopic(subtopicData?.subtopic || subtopicData);
       
-      // Handle questions data
-      const questionsArray = questionsData?.data || questionsData?.items || questionsData || [];
-      setQuestions(Array.isArray(questionsArray) ? questionsArray : []);
+      // Set all loaded questions
+      setQuestions(Array.isArray(allQuestions) ? allQuestions : []);
       
-      // Handle levels data
+      // Handle levels data with defensive programming
       const levelsArray = levelsData?.data || levelsData?.items || levelsData || [];
       setLevels(Array.isArray(levelsArray) ? levelsArray : []);
-      
+
     } catch (error: any) {
       console.error('Error loading data:', error);
       toast.error('Failed to load data');
@@ -138,8 +101,45 @@ export default function SubtopicQuestionsPage() {
     }
   };
 
-  // Group questions by level
-  const questionsByLevel = questions.reduce((acc, question) => {
+  // Helper function to load all questions across multiple pages
+  const loadAllQuestions = async (subtopicId: string): Promise<Question[]> => {
+    let allQuestions: Question[] = [];
+    let currentPage = 1;
+    let totalPages = 1;
+
+    console.log(`Loading all questions for subtopic ${subtopicId}...`);
+
+    do {
+      try {
+        const response = await apiService.get(`/admin/questions?subtopicId=${subtopicId}&page=${currentPage}&limit=100`);
+        const questionsData = response?.items || response || [];
+        
+        if (Array.isArray(questionsData)) {
+          allQuestions = [...allQuestions, ...questionsData];
+          console.log(`Loaded page ${currentPage}: ${questionsData.length} questions (total so far: ${allQuestions.length})`);
+        }
+        
+        // Update pagination info
+        totalPages = response?.totalPages || 1;
+        currentPage++;
+        
+        // Safety break to prevent infinite loops
+        if (currentPage > 100) {
+          console.warn('Reached maximum page limit (100). There might be an issue with pagination.');
+          break;
+        }
+      } catch (error) {
+        console.error(`Error loading questions page ${currentPage}:`, error);
+        break;
+      }
+    } while (currentPage <= totalPages);
+
+    console.log(`Finished loading all questions. Total: ${allQuestions.length}`);
+    return allQuestions;
+  };
+
+  // Group current page questions by level
+  const questionsByLevel = currentQuestions.reduce((acc, question) => {
     const level = question.level || 1;
     if (!acc[level]) {
       acc[level] = [];
@@ -168,63 +168,26 @@ export default function SubtopicQuestionsPage() {
     setShowAddModal(true);
   };
 
-  const downloadExcelTemplate = () => {
-    // Create a sample Excel template
-    const template = [
-      {
-        level: 1,
-        question: "Sample question here?",
-        option_a: "First option",
-        option_b: "Second option", 
-        option_c: "Third option",
-        option_d: "Fourth option",
-        correct_answer: "A",
-        explanation: "Explanation for the correct answer",
-        difficulty: "easy"
-      },
-      {
-        level: 2,
-        question: "Another sample question?",
-        option_a: "Option A",
-        option_b: "Option B",
-        option_c: "Option C", 
-        option_d: "Option D",
-        correct_answer: "B",
-        explanation: "Why this answer is correct",
-        difficulty: "medium"
-      }
-    ];
+  const getDifficultyFromLevel = (level: number): string => {
+    if (level <= 2) return 'easy';
+    if (level >= 5) return 'hard';
+    return 'medium';
+  };
 
-    // Convert to CSV for simple download
-    const headers = Object.keys(template[0]).join(',');
-    const rows = template.map(row => Object.values(row).join(','));
-    const csvContent = [headers, ...rows].join('\\n');
-    
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `questions_template_${subtopic?.name || 'subtopic'}.csv`;
-    a.click();
-    window.URL.revokeObjectURL(url);
+  const getDifficultyColor = (difficulty: string): string => {
+    switch (difficulty) {
+      case 'easy': return 'bg-green-100 text-green-800';
+      case 'medium': return 'bg-yellow-100 text-yellow-800';
+      case 'hard': return 'bg-red-100 text-red-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
   };
 
   if (isLoading) {
     return (
       <AdminLayout>
-        <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-gray-200 rounded w-1/4"></div>
-          <div className="h-32 bg-gray-200 rounded"></div>
-        </div>
-      </AdminLayout>
-    );
-  }
-
-  if (!topic || !subtopic) {
-    return (
-      <AdminLayout>
-        <div className="text-center py-12">
-          <p className="text-gray-500">Topic or subtopic not found</p>
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
         </div>
       </AdminLayout>
     );
@@ -234,138 +197,125 @@ export default function SubtopicQuestionsPage() {
     <AdminLayout>
       <div className="space-y-6">
         {/* Header */}
-        <div>
-          <button
-            onClick={() => router.push(`/topics/${topicId}`)}
-            className="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 mb-4"
-          >
-            <ArrowLeft className="h-4 w-4 mr-1" />
-            Back to {topic.name}
-          </button>
-          
-          <div className="flex justify-between items-start">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <button
+              onClick={() => router.push(`/topics/${topicId}`)}
+              className="p-2 hover:bg-gray-100 rounded-lg"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </button>
             <div>
               <h1 className="text-2xl font-bold text-gray-900">
-                {subtopic.name} - Questions
+                {subtopic?.name} Questions
               </h1>
-              <p className="mt-1 text-sm text-gray-600">{subtopic.description}</p>
+              <p className="text-sm text-gray-600">
+                {topic?.name} / {subtopic?.name}
+              </p>
             </div>
-            
-            <div className="flex items-center space-x-3">
-              <button
-                onClick={downloadExcelTemplate}
-                className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Download Template
-              </button>
-              
-              <button
-                onClick={() => setShowBulkImportModal(true)}
-                className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-              >
-                <Upload className="h-4 w-4 mr-2" />
-                Bulk Import
-              </button>
-              
-              <button
-                onClick={() => {
-                  setEditingQuestion(null);
-                  setShowAddModal(true);
-                }}
-                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add Question
-              </button>
-            </div>
+          </div>
+
+          <div className="flex items-center space-x-3">
+            {/* Level Filter */}
+            <select
+              value={selectedLevel || ''}
+              onChange={(e) => setSelectedLevel(e.target.value ? parseInt(e.target.value) : null)}
+              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All Levels</option>
+              {levels
+                .filter((level, index, self) => 
+                  index === self.findIndex(l => l.level === level.level)
+                )
+                .sort((a, b) => a.level - b.level)
+                .map((level) => (
+                  <option key={level.id} value={level.level}>
+                    Level {level.level}
+                  </option>
+                ))}
+            </select>
+
+            <button
+              onClick={() => router.push(`/topics/${topicId}/subtopics/${subtopicId}/categories`)}
+              className="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+              </svg>
+              <span>Categories</span>
+            </button>
+            {/* <button
+              onClick={() => setShowBulkImportModal(true)}
+              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+            >
+              <Upload className="h-4 w-4" />
+              <span>Import CSV</span>
+            </button> */}
+            <button
+              onClick={() => {
+                setEditingQuestion(null);
+                setShowAddModal(true);
+              }}
+              className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Add Question</span>
+            </button>
           </div>
         </div>
 
         {/* Statistics */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-white overflow-hidden shadow rounded-lg">
-            <div className="p-5">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <Target className="h-6 w-6 text-blue-600" />
-                </div>
-                <div className="ml-5 w-0 flex-1">
-                  <dl>
-                    <dt className="text-sm font-medium text-gray-500 truncate">
-                      Total Questions
-                    </dt>
-                    <dd className="text-lg font-medium text-gray-900">
-                      {questions.length}
-                    </dd>
-                  </dl>
-                </div>
+          <div className="bg-white p-4 rounded-lg shadow">
+            <div className="flex items-center">
+              <Target className="h-8 w-8 text-blue-500" />
+              <div className="ml-3">
+                <p className="text-sm font-medium text-gray-500">
+                  {selectedLevel ? `Level ${selectedLevel} Questions` : 'Total Questions'}
+                </p>
+                <p className="text-2xl font-bold text-gray-900">{filteredQuestions.length}</p>
+                {selectedLevel && (
+                  <p className="text-xs text-gray-400">of {questions.length} total</p>
+                )}
               </div>
             </div>
           </div>
-
-          <div className="bg-white overflow-hidden shadow rounded-lg">
-            <div className="p-5">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <div className="h-6 w-6 rounded-full bg-green-100 flex items-center justify-center">
-                    <span className="text-xs font-medium text-green-600">E</span>
-                  </div>
-                </div>
-                <div className="ml-5 w-0 flex-1">
-                  <dl>
-                    <dt className="text-sm font-medium text-gray-500 truncate">
-                      Easy
-                    </dt>
-                    <dd className="text-lg font-medium text-gray-900">
-                      {questions.filter(q => q.difficulty === 'easy').length}
-                    </dd>
-                  </dl>
-                </div>
+          <div className="bg-white p-4 rounded-lg shadow">
+            <div className="flex items-center">
+              <div className="h-8 w-8 bg-green-100 rounded-full flex items-center justify-center">
+                <span className="text-green-600 font-bold text-sm">E</span>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm font-medium text-gray-500">Easy</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {filteredQuestions.filter(q => getDifficultyFromLevel(q.level) === 'easy').length}
+                </p>
               </div>
             </div>
           </div>
-
-          <div className="bg-white overflow-hidden shadow rounded-lg">
-            <div className="p-5">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <div className="h-6 w-6 rounded-full bg-yellow-100 flex items-center justify-center">
-                    <span className="text-xs font-medium text-yellow-600">M</span>
-                  </div>
-                </div>
-                <div className="ml-5 w-0 flex-1">
-                  <dl>
-                    <dt className="text-sm font-medium text-gray-500 truncate">
-                      Medium
-                    </dt>
-                    <dd className="text-lg font-medium text-gray-900">
-                      {questions.filter(q => q.difficulty === 'medium').length}
-                    </dd>
-                  </dl>
-                </div>
+          <div className="bg-white p-4 rounded-lg shadow">
+            <div className="flex items-center">
+              <div className="h-8 w-8 bg-yellow-100 rounded-full flex items-center justify-center">
+                <span className="text-yellow-600 font-bold text-sm">M</span>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm font-medium text-gray-500">Medium</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {filteredQuestions.filter(q => getDifficultyFromLevel(q.level) === 'medium').length}
+                </p>
               </div>
             </div>
           </div>
-
-          <div className="bg-white overflow-hidden shadow rounded-lg">
-            <div className="p-5">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <div className="h-6 w-6 rounded-full bg-red-100 flex items-center justify-center">
-                    <span className="text-xs font-medium text-red-600">H</span>
-                  </div>
-                </div>
-                <div className="ml-5 w-0 flex-1">
-                  <dl>
-                    <dt className="text-sm font-medium text-gray-500 truncate">
-                      Hard
-                    </dt>
-                    <dd className="text-lg font-medium text-gray-900">
-                      {questions.filter(q => q.difficulty === 'hard').length}
-                    </dd>
-                  </dl>
-                </div>
+          <div className="bg-white p-4 rounded-lg shadow">
+            <div className="flex items-center">
+              <div className="h-8 w-8 bg-red-100 rounded-full flex items-center justify-center">
+                <span className="text-red-600 font-bold text-sm">H</span>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm font-medium text-gray-500">Hard</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {filteredQuestions.filter(q => getDifficultyFromLevel(q.level) === 'hard').length}
+                </p>
               </div>
             </div>
           </div>
@@ -373,162 +323,233 @@ export default function SubtopicQuestionsPage() {
 
         {/* Questions by Level */}
         <div className="space-y-6">
-          {levels.length === 0 ? (
-            <div className="bg-white shadow rounded-lg p-6 text-center">
-              <Target className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No levels found</h3>
-              <p className="text-gray-500">No levels are available for this subtopic.</p>
+          {Object.keys(questionsByLevel).length === 0 ? (
+            <div className="text-center py-12">
+              <div className="text-gray-400 text-lg">No questions found</div>
+              <p className="text-gray-500 mt-2">Add questions to get started</p>
             </div>
           ) : (
-            levels.sort((a, b) => a.level - b.level).map((level) => {
-              const levelQuestions = questionsByLevel[level.level] || [];
-              
-              return (
-                <div key={level.id} className="bg-white shadow rounded-lg">
-                  <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <h3 className="text-lg font-medium text-gray-900">
-                          Level {level.level}: {level.name}
-                        </h3>
-                        <p className="text-sm text-gray-600">{level.description}</p>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                          {levelQuestions.length} questions
+            Object.entries(questionsByLevel)
+              .sort(([a], [b]) => parseInt(a) - parseInt(b))
+              .map(([level, levelQuestions]) => (
+                <div key={level} className="bg-white rounded-lg shadow">
+                  <div className="px-6 py-4 border-b border-gray-200">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-medium text-gray-900">
+                        Level {level}
+                        <span className="ml-2 text-sm text-gray-500">
+                          ({levelQuestions.length} questions)
                         </span>
-                        <button
-                          onClick={() => {
-                            setSelectedLevel(level.level.toString());
-                            setEditingQuestion(null);
-                            setShowAddModal(true);
-                          }}
-                          className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded text-blue-600 bg-blue-100 hover:bg-blue-200"
-                        >
-                          <Plus className="h-3 w-3 mr-1" />
-                          Add Question
-                        </button>
-                      </div>
+                      </h3>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getDifficultyColor(getDifficultyFromLevel(parseInt(level)))}`}>
+                        {getDifficultyFromLevel(parseInt(level))}
+                      </span>
                     </div>
                   </div>
-                  
-                  {levelQuestions.length === 0 ? (
-                    <div className="p-6 text-center text-gray-500">
-                      <p>No questions yet for this level.</p>
-                    </div>
-                  ) : (
-                    <div className="divide-y divide-gray-200">
-                      {levelQuestions.map((question, index) => (
-                        <div key={question.id} className="p-6 hover:bg-gray-50">
-                          <div className="flex justify-between items-start">
-                            <div className="flex-1">
-                              <div className="flex items-center space-x-2 mb-2">
-                                <span className="text-sm font-medium text-gray-900">
-                                  Q{index + 1}.
-                                </span>
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${{
-                                  easy: 'bg-green-100 text-green-800',
-                                  medium: 'bg-yellow-100 text-yellow-800',
-                                  hard: 'bg-red-100 text-red-800'
-                                }[question.difficulty] || 'bg-gray-100 text-gray-800'}`}>
-                                  {question.difficulty}
-                                </span>
-                              </div>
-                              
-                              <h4 className="text-base font-medium text-gray-900 mb-3">
+
+                  <div className="divide-y divide-gray-200">
+                    {levelQuestions.map((question, index) => (
+                      <div key={question.id} className="px-6 py-4">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-3">
+                              <span className="flex-shrink-0 text-sm font-medium text-gray-500">
+                                #{index + 1}
+                              </span>
+                              <p className="text-sm font-medium text-gray-900">
                                 {question.question}
-                              </h4>
-                              
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
-                                {question.options.map((option, optionIndex) => (
-                                  <div 
-                                    key={optionIndex}
-                                    className={`p-2 text-sm rounded border $${
-                                      optionIndex === question.correctAnswer 
-                                        ? 'bg-green-50 border-green-200 text-green-800' 
-                                        : 'bg-gray-50 border-gray-200'
-                                    }`}
-                                  >
-                                    <span className="font-medium">
-                                      {String.fromCharCode(65 + optionIndex)}.
-                                    </span> {option}
-                                  </div>
-                                ))}
-                              </div>
-                              
-                              {question.explanation && (
-                                <div className="bg-blue-50 p-3 rounded-md">
-                                  <p className="text-sm text-blue-800">
-                                    <strong>Explanation:</strong> {question.explanation}
-                                  </p>
-                                </div>
-                              )}
+                              </p>
                             </div>
                             
-                            <div className="ml-6 flex items-center space-x-2">
-                              <button
-                                onClick={() => handleEditQuestion(question)}
-                                className="text-indigo-600 hover:text-indigo-900 inline-flex items-center"
-                              >
-                                <Edit className="h-4 w-4" />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteQuestion(question.id)}
-                                className="text-red-600 hover:text-red-900 inline-flex items-center"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
+                            <div className="mt-2 grid grid-cols-2 gap-2">
+                              {(question.choices || question.options || []).map((option, optIndex) => {
+                                // Handle both string correctAnswer and number correctAnswer
+                                const isCorrect = typeof question.correctAnswer === 'string' 
+                                  ? question.correctAnswer === option
+                                  : question.correctAnswer === optIndex;
+                                
+                                return (
+                                  <div
+                                    key={optIndex}
+                                    className={`p-2 rounded text-xs ${
+                                      isCorrect
+                                        ? 'bg-green-100 text-green-800 border border-green-200'
+                                        : 'bg-gray-50 text-gray-700'
+                                    }`}
+                                  >
+                                    <strong>{String.fromCharCode(65 + optIndex)}:</strong> {option}
+                                  </div>
+                                );
+                              })}
                             </div>
+                            
+                            {question.explanation && (
+                              <div className="mt-2">
+                                <p className="text-xs text-gray-600">
+                                  <strong>Explanation:</strong> {question.explanation}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex items-center space-x-2 ml-4">
+                            <button
+                              onClick={() => handleEditQuestion(question)}
+                              className="p-1 text-blue-600 hover:text-blue-800"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteQuestion(question.id)}
+                              className="p-1 text-red-600 hover:text-red-800"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              );
-            })
+              ))
           )}
         </div>
+
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="bg-white px-4 py-3 border-t border-gray-200 sm:px-6">
+            <div className="flex items-center justify-between">
+              <div className="flex-1 flex justify-between sm:hidden">
+                <button
+                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                  disabled={currentPage === 1}
+                  className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                  disabled={currentPage === totalPages}
+                  className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+              </div>
+              <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm text-gray-700">
+                    Showing <span className="font-medium">{indexOfFirstQuestion + 1}</span> to{' '}
+                    <span className="font-medium">
+                      {Math.min(indexOfLastQuestion, filteredQuestions.length)}
+                    </span>{' '}
+                    of <span className="font-medium">{filteredQuestions.length}</span> questions
+                    {selectedLevel && (
+                      <span className="text-gray-500"> (Level {selectedLevel} filtered)</span>
+                    )}
+                  </p>
+                </div>
+                <div>
+                  <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                    <button
+                      onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                      disabled={currentPage === 1}
+                      className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <span className="sr-only">Previous</span>
+                      <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                        <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    </button>
+                    
+                    {/* Page numbers */}
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, index) => {
+                      let pageNumber;
+                      if (totalPages <= 5) {
+                        pageNumber = index + 1;
+                      } else if (currentPage <= 3) {
+                        pageNumber = index + 1;
+                      } else if (currentPage >= totalPages - 2) {
+                        pageNumber = totalPages - 4 + index;
+                      } else {
+                        pageNumber = currentPage - 2 + index;
+                      }
+                      
+                      return (
+                        <button
+                          key={pageNumber}
+                          onClick={() => setCurrentPage(pageNumber)}
+                          className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
+                            pageNumber === currentPage
+                              ? 'z-10 bg-blue-50 border-blue-500 text-blue-600'
+                              : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
+                          }`}
+                        >
+                          {pageNumber}
+                        </button>
+                      );
+                    })}
+                    
+                    <button
+                      onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                      disabled={currentPage === totalPages}
+                      className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <span className="sr-only">Next</span>
+                      <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                        <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                      </svg>
+                    </button>
+                  </nav>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Add/Edit Question Modal */}
-      <QuestionModal
-        isOpen={showAddModal}
-        onClose={() => {
-          setShowAddModal(false);
-          setEditingQuestion(null);
-          setSelectedLevel('');
-        }}
-        onSave={loadData}
-        question={editingQuestion}
-        topicId={topicId}
-        subtopicId={subtopicId}
-        levels={levels}
-        selectedLevel={selectedLevel}
-      />
+      {showAddModal && (
+        <QuestionModal
+          isOpen={showAddModal}
+          onClose={() => {
+            setShowAddModal(false);
+            setEditingQuestion(null);
+          }}
+          onSave={() => {
+            loadData();
+            setShowAddModal(false);
+            setEditingQuestion(null);
+          }}
+          question={editingQuestion}
+          topicId={topicId}
+          subtopicId={subtopicId}
+          levels={levels}
+        />
+      )}
 
       {/* Bulk Import Modal */}
-      <BulkImportModal
-        isOpen={showBulkImportModal}
-        onClose={() => setShowBulkImportModal(false)}
-        onSave={loadData}
-        topicId={topicId}
-        subtopicId={subtopicId}
-      />
+      {showBulkImportModal && (
+        <BulkImportModal
+          isOpen={showBulkImportModal}
+          onClose={() => setShowBulkImportModal(false)}
+          onSave={loadData}
+          topicId={topicId}
+          subtopicId={subtopicId}
+        />
+      )}
     </AdminLayout>
   );
 }
 
 // Question Modal Component
-function QuestionModal({ 
-  isOpen, 
-  onClose, 
-  onSave, 
-  question, 
-  topicId, 
-  subtopicId, 
-  levels, 
-  selectedLevel 
+function QuestionModal({
+  isOpen,
+  onClose,
+  onSave,
+  question,
+  topicId,
+  subtopicId,
+  levels
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -537,65 +558,70 @@ function QuestionModal({
   topicId: string;
   subtopicId: string;
   levels: Level[];
-  selectedLevel: string;
 }) {
   const [formData, setFormData] = useState({
-    question: '',
-    options: ['', '', '', ''],
-    correctAnswer: 0,
-    explanation: '',
-    difficulty: 'easy',
-    level: selectedLevel || '1'
+    question: question?.question || '',
+    options: question?.choices || question?.options || ['', '', '', ''],
+    correctAnswer: (() => {
+      if (!question) return 0;
+      if (typeof question.correctAnswer === 'number') return question.correctAnswer;
+      // If correctAnswer is a string, find its index in choices/options
+      const choices = question.choices || question.options || [];
+      const index = choices.findIndex(choice => choice === question.correctAnswer);
+      return index >= 0 ? index : 0;
+    })(),
+    explanation: question?.explanation || '',
+    level: question?.level || 1
   });
+  const [isSaving, setIsSaving] = useState(false);
 
-  useEffect(() => {
-    if (question) {
-      setFormData({
-        question: question.question,
-        options: question.options,
-        correctAnswer: question.correctAnswer,
-        explanation: question.explanation || '',
-        difficulty: question.difficulty,
-        level: question.level.toString()
-      });
-    } else {
-      setFormData({
-        question: '',
-        options: ['', '', '', ''],
-        correctAnswer: 0,
-        explanation: '',
-        difficulty: 'easy',
-        level: selectedLevel || '1'
-      });
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!formData.question.trim()) {
+      toast.error('Question is required');
+      return;
     }
-  }, [question, selectedLevel]);
 
-  const handleSave = async () => {
+    if (formData.options.some(opt => !opt.trim())) {
+      toast.error('All options are required');
+      return;
+    }
+
+    setIsSaving(true);
     try {
-      const payload = {
-        question: formData.question,
-        options: formData.options,
-        correctAnswer: formData.correctAnswer,
-        explanation: formData.explanation,
-        difficulty: formData.difficulty,
-        level: parseInt(formData.level),
+      // Determine difficulty based on level
+      const difficulty = formData.level <= 2 ? 'easy' : formData.level >= 5 ? 'hard' : 'medium';
+
+      // Find or create a level_id based on the level number
+      // For now, we'll use a simple approach - in a production app, you'd want proper level management
+      const level_id = `level_${formData.level}_${subtopicId}`;
+
+      const questionData = {
+        level_id,
+        subtopic_id: subtopicId,
         topic_id: topicId,
-        subtopic_id: subtopicId
+        question: formData.question,
+        choices: formData.options,
+        correctAnswer: formData.options[formData.correctAnswer], // Send the actual answer text
+        explanation: formData.explanation,
+        difficulty
       };
 
       if (question) {
-        await apiService.put(`/admin/questions/${question.id}`, payload);
+        await apiService.put(`/admin/questions/${question.id}`, questionData);
         toast.success('Question updated successfully');
       } else {
-        await apiService.post('/admin/questions', payload);
+        await apiService.post('/admin/questions', questionData);
         toast.success('Question created successfully');
       }
-
+      
       onSave();
-      onClose();
     } catch (error: any) {
       console.error('Error saving question:', error);
       toast.error('Failed to save question');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -610,27 +636,24 @@ function QuestionModal({
           </h3>
         </div>
 
-        <div className="px-6 py-4 space-y-4">
-          {/* Level Selection */}
+        <form onSubmit={handleSubmit} className="px-6 py-4 space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Level
             </label>
             <select
               value={formData.level}
-              onChange={(e) => setFormData({ ...formData, level: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              required
+              onChange={(e) => setFormData({ ...formData, level: parseInt(e.target.value) })}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
             >
-              {levels.map((level) => (
-                <option key={level.id} value={level.level.toString()}>
-                  Level {level.level} - {level.name}
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(level => (
+                <option key={level} value={level}>
+                  Level {level} ({level <= 2 ? 'Easy' : level >= 5 ? 'Hard' : 'Medium'})
                 </option>
               ))}
             </select>
           </div>
 
-          {/* Question */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Question
@@ -638,24 +661,22 @@ function QuestionModal({
             <textarea
               value={formData.question}
               onChange={(e) => setFormData({ ...formData, question: e.target.value })}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
               rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Enter the question..."
               required
             />
           </div>
 
-          {/* Options */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Options
-            </label>
-            <div className="space-y-2">
-              {formData.options.map((option, index) => (
-                <div key={index} className="flex items-center space-x-2">
-                  <span className="w-8 text-sm font-medium text-gray-500">
-                    {String.fromCharCode(65 + index)}.
-                  </span>
+          <div className="grid grid-cols-2 gap-4">
+            {formData.options.map((option, index) => (
+              <div key={index}>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Option {String.fromCharCode(65 + index)}
+                  {index === formData.correctAnswer && (
+                    <span className="text-green-600 ml-1">(Correct)</span>
+                  )}
+                </label>
+                <div className="flex space-x-2">
                   <input
                     type="text"
                     value={option}
@@ -664,43 +685,25 @@ function QuestionModal({
                       newOptions[index] = e.target.value;
                       setFormData({ ...formData, options: newOptions });
                     }}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    placeholder={`Option ${String.fromCharCode(65 + index)}`}
+                    className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm"
                     required
                   />
-                  <input
-                    type="radio"
-                    name="correctAnswer"
-                    checked={formData.correctAnswer === index}
-                    onChange={() => setFormData({ ...formData, correctAnswer: index })}
-                    className="text-blue-600 focus:ring-blue-500"
-                  />
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, correctAnswer: index })}
+                    className={`px-3 py-2 rounded-md text-sm ${
+                      index === formData.correctAnswer
+                        ? 'bg-green-600 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    ✓
+                  </button>
                 </div>
-              ))}
-            </div>
-            <p className="text-xs text-gray-500 mt-1">
-              Select the correct answer by clicking the radio button
-            </p>
+              </div>
+            ))}
           </div>
 
-          {/* Difficulty */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Difficulty
-            </label>
-            <select
-              value={formData.difficulty}
-              onChange={(e) => setFormData({ ...formData, difficulty: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              required
-            >
-              <option value="easy">Easy</option>
-              <option value="medium">Medium</option>
-              <option value="hard">Hard</option>
-            </select>
-          </div>
-
-          {/* Explanation */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Explanation (Optional)
@@ -708,12 +711,11 @@ function QuestionModal({
             <textarea
               value={formData.explanation}
               onChange={(e) => setFormData({ ...formData, explanation: e.target.value })}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
               rows={2}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Explain why this answer is correct..."
             />
           </div>
-        </div>
+        </form>
 
         <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
           <button
@@ -723,10 +725,11 @@ function QuestionModal({
             Cancel
           </button>
           <button
-            onClick={handleSave}
-            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md"
+            onClick={handleSubmit}
+            disabled={isSaving}
+            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md disabled:opacity-50"
           >
-            {question ? 'Update' : 'Create'} Question
+            {isSaving ? 'Saving...' : question ? 'Update Question' : 'Create Question'}
           </button>
         </div>
       </div>
@@ -735,12 +738,12 @@ function QuestionModal({
 }
 
 // Bulk Import Modal Component
-function BulkImportModal({ 
-  isOpen, 
-  onClose, 
-  onSave, 
-  topicId, 
-  subtopicId 
+function BulkImportModal({
+  isOpen,
+  onClose,
+  onSave,
+  topicId,
+  subtopicId
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -752,12 +755,13 @@ function BulkImportModal({
   const [isUploading, setIsUploading] = useState(false);
 
   const downloadTemplate = () => {
+    // correct_answer should be the letter (A/B/C/D) for user clarity, but will be converted to the answer text in import logic
     const csvContent = [
       'level,question,option_a,option_b,option_c,option_d,correct_answer,explanation',
       '1,"What is the capital of France?","London","Berlin","Paris","Madrid","C","Paris is the capital city of France"',
       '2,"Which planet is closest to the Sun?","Venus","Mercury","Earth","Mars","B","Mercury is the closest planet to the Sun"',
       '3,"What is the largest mammal?","Elephant","Whale","Giraffe","Hippo","B","The blue whale is the largest mammal"'
-    ].join('\\n');
+    ].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
@@ -787,16 +791,14 @@ function BulkImportModal({
 
     setIsUploading(true);
     try {
-      // Parse CSV file
       const text = await file.text();
-      const lines = text.split('\\n').filter(line => line.trim());
+      const lines = text.split('\n').filter(line => line.trim());
       
       if (lines.length < 2) {
         toast.error('CSV file must have at least a header row and one data row');
         return;
       }
 
-      // Parse header to get column indices
       const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
       const getColumnIndex = (columnName: string) => {
         const index = headers.findIndex(h => h.includes(columnName));
@@ -817,14 +819,12 @@ function BulkImportModal({
         return;
       }
 
-      // Parse data rows
       const questionsData = [];
       for (let i = 1; i < lines.length; i++) {
         const columns = lines[i].split(',').map(col => col.trim().replace(/^"|"$/g, ''));
         
-        if (columns.length < headers.length) continue; // Skip incomplete rows
+        if (columns.length < headers.length) continue;
 
-        // Convert correct answer letter to index
         const correctAnswerLetter = columns[correctCol].toUpperCase();
         let correctAnswerIndex = 0;
         switch (correctAnswerLetter) {
@@ -836,44 +836,47 @@ function BulkImportModal({
         }
 
         const level = levelCol >= 0 ? parseInt(columns[levelCol]) || 1 : 1;
+        const difficulty = level <= 2 ? 'easy' : level >= 5 ? 'hard' : 'medium';
         
-        // Determine difficulty based on level number
-        let difficulty = 'medium';
-        if (level <= 2) {
-          difficulty = 'easy';
-        } else if (level >= 5) {
-          difficulty = 'hard';
-        }
+        const options = [
+          columns[optionACol],
+          columns[optionBCol],
+          columns[optionCCol],
+          columns[optionDCol]
+        ];
 
         questionsData.push({
-          level,
+          level_id: `level_${level}_${subtopicId}`,
+          subtopic_id: subtopicId,
+          topic_id: topicId,
           question: columns[questionCol],
-          options: [
-            columns[optionACol],
-            columns[optionBCol],
-            columns[optionCCol],
-            columns[optionDCol]
-          ],
-          correctAnswer: correctAnswerIndex,
+          choices: options,
+          correctAnswer: options[correctAnswerIndex], // Send the actual answer text, not index
           explanation: explanationCol >= 0 ? columns[explanationCol] : '',
           difficulty
         });
       }
 
-      // Send to backend
-      const response = await apiService.post('/admin/questions/bulk-import', {
-        topicId,
-        subtopicId,
-        questionsData
-      });
+      // Use bulk create endpoint instead of loop
+      try {
+        const result = await apiService.post('/admin/questions/bulk-create', {
+          topicId,
+          subtopicId: subtopicId,
+          questionsData
+        });
 
-      if (response.created > 0) {
-        toast.success(`Successfully imported ${response.created} questions`);
-        if (response.errors > 0) {
-          toast.error(`${response.errors} questions failed to import`);
+        if (result.success) {
+          toast.success(`Successfully imported ${result.successCount} questions`);
+          if (result.errorCount > 0) {
+            toast.error(`${result.errorCount} questions failed to import`);
+          }
+        } else {
+          toast.error('No questions were imported');
         }
-      } else {
-        toast.error('No questions were imported');
+      } catch (error) {
+        console.error('Error importing questions:', error);
+        toast.error('Failed to import questions');
+        return;
       }
 
       onSave();

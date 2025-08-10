@@ -1,0 +1,370 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { useRouter, useParams } from 'next/navigation';
+import AdminLayout from '@/components/AdminLayout';
+import { questionsApi, categoriesApi, topicsApi, subtopicsApi, levelsApi } from '@/services/api';
+import { Question, Topic, Subtopic, Category, Level } from '@/types';
+import { ArrowLeft, BookOpen, ChevronRight, Layers, HelpCircle, Plus, Trash2 } from 'lucide-react';
+import toast from 'react-hot-toast';
+
+export default function CreateQuestionPage() {
+  const router = useRouter();
+  const params = useParams();
+  const topicId = params?.id as string;
+  const subtopicId = params?.subtopicId as string;
+  const categoryId = params?.categoryId as string;
+
+  const [topic, setTopic] = useState<Topic | null>(null);
+  const [subtopic, setSubtopic] = useState<Subtopic | null>(null);
+  const [category, setCategory] = useState<Category | null>(null);
+  const [levels, setLevels] = useState<Level[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const [formData, setFormData] = useState({
+    question: '',
+    correctAnswer: '',
+    choices: ['', '', '', ''], // Will include correct answer + wrong answers
+    explanation: '',
+    difficulty: 1,
+    level_id: '', // Add level_id field
+    tags: [] as string[],
+    estimatedTime: 60,
+    isActive: true
+  });
+
+  useEffect(() => {
+    loadData();
+  }, [topicId, subtopicId, categoryId]);
+
+  const loadData = async () => {
+    try {
+      setIsLoading(true);
+      const [topicRes, subtopicRes, categoryRes, levelsRes] = await Promise.all([
+        topicsApi.getById(topicId),
+        subtopicsApi.getById(subtopicId),
+        categoriesApi.getById(categoryId),
+        levelsApi.getAll({ category_id: categoryId, limit: 100 })
+      ]);
+
+      setTopic(topicRes);
+      setSubtopic(subtopicRes);
+      setCategory(categoryRes);
+      setLevels(levelsRes.data || []);
+    } catch (error) {
+      console.error('Error loading data:', error);
+      toast.error('Failed to load data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Get the actual choices (skip the first empty element)
+    const actualChoices = formData.choices.slice(1).filter(choice => choice.trim() !== '');
+    
+    if (!formData.question.trim() || !formData.correctAnswer.trim() || !formData.level_id.trim() || actualChoices.length < 2) {
+      toast.error('Please fill in all required fields (question, level, correct answer, and at least 2 other choices)');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      
+      // Create the choices array with correct answer included, filtering out empty choices
+      const otherChoices = formData.choices.slice(1).filter(choice => choice.trim() !== '');
+      const allChoices = [formData.correctAnswer, ...otherChoices];
+      
+      await questionsApi.create({
+        topic_id: topicId,
+        subtopic_id: subtopicId,
+        category_id: categoryId,
+        level_id: formData.level_id,
+        question: formData.question,
+        choices: allChoices,
+        correctAnswer: formData.correctAnswer,
+        explanation: formData.explanation,
+        difficulty: formData.difficulty,
+        tags: formData.tags,
+        estimatedTime: formData.estimatedTime,
+        isActive: formData.isActive
+      });
+      
+      toast.success('Question created successfully');
+      router.push(`/topics/${topicId}/subtopics/${subtopicId}/categories/${categoryId}/questions`);
+    } catch (error: any) {
+      console.error('Error creating question:', error);
+      toast.error('Failed to create question');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleInputChange = (field: string, value: any) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleChoiceChange = (index: number, value: string) => {
+    const newChoices = [...formData.choices];
+    newChoices[index] = value;
+    setFormData(prev => ({ ...prev, choices: newChoices }));
+  };
+
+  const addChoice = () => {
+    if (formData.choices.length < 6) {
+      setFormData(prev => ({ 
+        ...prev, 
+        choices: [...prev.choices, ''] 
+      }));
+    }
+  };
+
+  const removeChoice = (index: number) => {
+    if (formData.choices.length > 3) {
+      const newChoices = formData.choices.filter((_: string, i: number) => i !== index);
+      setFormData(prev => ({ ...prev, choices: newChoices }));
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <AdminLayout>
+        <div className="animate-pulse space-y-4">
+          <div className="h-8 bg-gray-200 rounded w-1/4"></div>
+          <div className="h-32 bg-gray-200 rounded"></div>
+        </div>
+      </AdminLayout>
+    );
+  }
+
+  return (
+    <AdminLayout>
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <button
+              onClick={() => router.push(`/topics/${topicId}/subtopics/${subtopicId}/categories/${categoryId}/questions`)}
+              className="flex items-center text-blue-600 hover:text-blue-800"
+            >
+              <ArrowLeft className="h-5 w-5 mr-2" />
+              Back to Questions
+            </button>
+          </div>
+        </div>
+
+        {/* Breadcrumb */}
+        <div className="bg-white p-4 rounded-lg border">
+          <div className="flex items-center text-sm text-gray-600">
+            <BookOpen className="h-4 w-4 mr-2" />
+            <span className="font-medium text-gray-900">{topic?.name}</span>
+            <ChevronRight className="h-4 w-4 mx-2" />
+            <span className="font-medium text-gray-900">{subtopic?.name}</span>
+            <ChevronRight className="h-4 w-4 mx-2" />
+            <Layers className="h-4 w-4 mr-1" />
+            <span className="font-medium text-gray-900">{category?.name}</span>
+            <ChevronRight className="h-4 w-4 mx-2" />
+            <HelpCircle className="h-4 w-4 mr-1" />
+            <span>Create Question</span>
+          </div>
+        </div>
+
+        {/* Form */}
+        <div className="bg-white rounded-lg border">
+          <form onSubmit={handleSubmit} className="p-6 space-y-6">
+            <div className="border-b border-gray-200 pb-4">
+              <h1 className="text-2xl font-bold text-gray-900">Create Question</h1>
+              <p className="text-gray-600 mt-1">
+                Add a new question to <span className="font-medium">{category?.name}</span>
+              </p>
+            </div>
+
+            {/* Question */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Question *
+              </label>
+              <textarea
+                value={formData.question}
+                onChange={(e) => handleInputChange('question', e.target.value)}
+                rows={3}
+                className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Enter the question..."
+                required
+              />
+            </div>
+
+            {/* Correct Answer */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Correct Answer *
+              </label>
+              <input
+                type="text"
+                value={formData.correctAnswer}
+                onChange={(e) => handleInputChange('correctAnswer', e.target.value)}
+                className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Enter the correct answer..."
+                required
+              />
+            </div>
+
+            {/* Wrong Answers */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  Other Answer Choices * (at least 2 additional choices required)
+                </label>
+                {formData.choices.length < 6 && (
+                  <button
+                    type="button"
+                    onClick={addChoice}
+                    className="text-blue-600 hover:text-blue-800 text-sm flex items-center"
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add Choice
+                  </button>
+                )}
+              </div>
+              {formData.choices.slice(1).map((choice, index) => (
+                <div key={index} className="flex items-center space-x-2 mb-2">
+                  <input
+                    type="text"
+                    value={choice}
+                    onChange={(e) => handleChoiceChange(index + 1, e.target.value)}
+                    className="flex-1 border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder={`Choice ${index + 2}...`}
+                  />
+                  {formData.choices.length > 3 && (
+                    <button
+                      type="button"
+                      onClick={() => removeChoice(index + 1)}
+                      className="text-red-600 hover:text-red-800 p-2"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Difficulty and Level */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Level *
+                </label>
+                <select
+                  value={formData.level_id}
+                  onChange={(e) => handleInputChange('level_id', e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                >
+                  <option value="">Select a level</option>
+                  {levels.map(level => (
+                    <option key={level.id} value={level.id}>
+                      Level {level.level} - {level.name || `${level.totalQuestions} questions`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Difficulty (1-10)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={formData.difficulty}
+                  onChange={(e) => handleInputChange('difficulty', parseInt(e.target.value))}
+                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+
+            {/* Estimated Time and Tags */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Difficulty (1-10)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={formData.difficulty}
+                  onChange={(e) => handleInputChange('difficulty', parseInt(e.target.value))}
+                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Estimated Time (seconds)
+                </label>
+                <input
+                  type="number"
+                  min="10"
+                  max="300"
+                  value={formData.estimatedTime}
+                  onChange={(e) => handleInputChange('estimatedTime', parseInt(e.target.value))}
+                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+
+            {/* Explanation */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Explanation (optional)
+              </label>
+              <textarea
+                value={formData.explanation}
+                onChange={(e) => handleInputChange('explanation', e.target.value)}
+                rows={3}
+                className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Explain why this is the correct answer..."
+              />
+            </div>
+
+            {/* Status */}
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                id="isActive"
+                checked={formData.isActive}
+                onChange={(e) => handleInputChange('isActive', e.target.checked)}
+                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              />
+              <label htmlFor="isActive" className="ml-2 text-sm text-gray-700">
+                Active (question will be available for quizzes)
+              </label>
+            </div>
+
+            {/* Submit Buttons */}
+            <div className="flex justify-end space-x-4 pt-4 border-t border-gray-200">
+              <button
+                type="button"
+                onClick={() => router.push(`/topics/${topicId}/subtopics/${subtopicId}/categories/${categoryId}/questions`)}
+                className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                disabled={isSubmitting}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                {isSubmitting ? 'Creating...' : 'Create Question'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </AdminLayout>
+  );
+}

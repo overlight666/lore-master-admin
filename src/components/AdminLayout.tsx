@@ -13,13 +13,15 @@ import {
   LogOut,
   Menu,
   X,
-  Target
+  Target,
+  Layers
 } from 'lucide-react';
 import { useState } from 'react';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Topics', href: '/topics', icon: BookOpen },
+  { name: 'Categories', href: '/categories', icon: Layers },
   { name: 'Levels', href: '/levels', icon: Target },
   { name: 'Questions', href: '/questions', icon: HelpCircle },
   { name: 'Users', href: '/users', icon: Users },

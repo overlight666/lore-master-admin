@@ -3,10 +3,13 @@ import { auth } from '@/lib/firebase';
 import { 
   User, 
   Topic, 
-  Subtopic, 
+  Subtopic,
+  Category,
+  Level, 
   Question, 
   TopicFormData, 
-  SubtopicFormData, 
+  SubtopicFormData,
+  CategoryFormData, 
   QuestionFormData,
   PaginatedResponse,
   DashboardStats,
@@ -87,7 +90,7 @@ export const authApi = {
 // Dashboard API
 export const dashboardApi = {
   getStats: async (): Promise<DashboardStats> => {
-    const response = await api.get('/dashboard/stats');
+    const response = await api.get('/admin/dashboard/stats');
     return response.data;
   },
 };
@@ -95,53 +98,109 @@ export const dashboardApi = {
 // Topics API
 export const topicsApi = {
   getAll: async (params?: { page?: number; limit?: number }): Promise<PaginatedResponse<Topic>> => {
-    const response = await api.get('/topics', { params });
+    const response = await api.get('/admin/topics', { params });
     return response.data;
   },
   getById: async (id: string): Promise<Topic> => {
-    const response = await api.get(`/topics/${id}`);
+    const response = await api.get(`/admin/topics/${id}`);
     return response.data;
   },
   create: async (data: TopicFormData): Promise<Topic> => {
-    const response = await api.post('/topics', data);
+    const response = await api.post('/admin/topics', data);
     return response.data;
   },
   update: async (id: string, data: Partial<TopicFormData>): Promise<Topic> => {
-    const response = await api.put(`/topics/${id}`, data);
+    const response = await api.put(`/admin/topics/${id}`, data);
     return response.data;
   },
   delete: async (id: string): Promise<void> => {
-    await api.delete(`/topics/${id}`);
+    await api.delete(`/admin/topics/${id}`);
   },
   toggleStatus: async (id: string): Promise<Topic> => {
-    const response = await api.patch(`/topics/${id}/toggle-status`);
+    const response = await api.patch(`/admin/topics/${id}/toggle-status`);
     return response.data;
   },
 };
 
 // Subtopics API
 export const subtopicsApi = {
-  getAll: async (params?: { topicId?: string; page?: number; limit?: number }): Promise<PaginatedResponse<Subtopic>> => {
-    const response = await api.get('/subtopics', { params });
+  getAll: async (params?: { topic_id?: string; page?: number; limit?: number }): Promise<PaginatedResponse<Subtopic>> => {
+    const response = await api.get('/admin/subtopics', { params });
     return response.data;
   },
   getById: async (id: string): Promise<Subtopic> => {
-    const response = await api.get(`/subtopics/${id}`);
+    const response = await api.get(`/admin/subtopics/${id}`);
     return response.data;
   },
   create: async (data: SubtopicFormData): Promise<Subtopic> => {
-    const response = await api.post('/subtopics', data);
+    const response = await api.post('/admin/subtopics', data);
     return response.data;
   },
   update: async (id: string, data: Partial<SubtopicFormData>): Promise<Subtopic> => {
-    const response = await api.put(`/subtopics/${id}`, data);
+    const response = await api.put(`/admin/subtopics/${id}`, data);
     return response.data;
   },
   delete: async (id: string): Promise<void> => {
-    await api.delete(`/subtopics/${id}`);
+    await api.delete(`/admin/subtopics/${id}`);
   },
   toggleStatus: async (id: string): Promise<Subtopic> => {
-    const response = await api.patch(`/subtopics/${id}/toggle-status`);
+    const response = await api.patch(`/admin/subtopics/${id}/toggle-status`);
+    return response.data;
+  },
+};
+
+// Categories API
+export const categoriesApi = {
+  getAll: async (params?: { topic_id?: string; subtopic_id?: string; page?: number; limit?: number }): Promise<PaginatedResponse<Category>> => {
+    console.log('📡 Categories API call with params:', params);
+    const response = await api.get('/admin/categories', { params });
+    console.log('📊 Categories API response:', response.data);
+    return response.data;
+  },
+  getById: async (id: string): Promise<Category> => {
+    const response = await api.get(`/admin/categories/${id}`);
+    return response.data;
+  },
+  create: async (data: CategoryFormData): Promise<Category> => {
+    const response = await api.post('/admin/categories', data);
+    return response.data;
+  },
+  update: async (id: string, data: Partial<CategoryFormData>): Promise<Category> => {
+    const response = await api.put(`/admin/categories/${id}`, data);
+    return response.data;
+  },
+  delete: async (id: string): Promise<void> => {
+    await api.delete(`/admin/categories/${id}`);
+  },
+  toggleStatus: async (id: string): Promise<Category> => {
+    const response = await api.patch(`/admin/categories/${id}/toggle-status`);
+    return response.data;
+  },
+};
+
+// Levels API
+export const levelsApi = {
+  getAll: async (params?: { topic_id?: string; subtopic_id?: string; category_id?: string; page?: number; limit?: number }): Promise<PaginatedResponse<Level>> => {
+    const response = await api.get('/admin/levels', { params });
+    return response.data;
+  },
+  getById: async (id: string): Promise<Level> => {
+    const response = await api.get(`/admin/levels/${id}`);
+    return response.data;
+  },
+  create: async (data: any): Promise<Level> => {
+    const response = await api.post('/admin/levels', data);
+    return response.data;
+  },
+  update: async (id: string, data: any): Promise<Level> => {
+    const response = await api.put(`/admin/levels/${id}`, data);
+    return response.data;
+  },
+  delete: async (id: string): Promise<void> => {
+    await api.delete(`/admin/levels/${id}`);
+  },
+  toggleStatus: async (id: string): Promise<Level> => {
+    const response = await api.patch(`/admin/levels/${id}/toggle-status`);
     return response.data;
   },
 };
@@ -150,31 +209,72 @@ export const subtopicsApi = {
 export const questionsApi = {
   getAll: async (params?: { 
     topicId?: string; 
-    subtopicId?: string; 
+    subtopicId?: string;
+    categoryId?: string; 
     difficulty?: number; 
     page?: number; 
     limit?: number 
   }): Promise<PaginatedResponse<Question>> => {
-    const response = await api.get('/questions', { params });
+    const response = await api.get('/admin/questions', { params });
     return response.data;
   },
   getById: async (id: string): Promise<Question> => {
-    const response = await api.get(`/questions/${id}`);
+    const response = await api.get(`/admin/questions/${id}`);
     return response.data;
   },
   create: async (data: QuestionFormData): Promise<Question> => {
-    const response = await api.post('/questions', data);
+    const response = await api.post('/admin/questions', data);
     return response.data;
   },
   update: async (id: string, data: Partial<QuestionFormData>): Promise<Question> => {
-    const response = await api.put(`/questions/${id}`, data);
+    const response = await api.put(`/admin/questions/${id}`, data);
     return response.data;
   },
   delete: async (id: string): Promise<void> => {
-    await api.delete(`/questions/${id}`);
+    await api.delete(`/admin/questions/${id}`);
   },
   toggleStatus: async (id: string): Promise<Question> => {
-    const response = await api.patch(`/questions/${id}/toggle-status`);
+    const response = await api.patch(`/admin/questions/${id}/toggle-status`);
+    return response.data;
+  },
+  bulkCreate: async (data: {
+    topicId: string;
+    subtopicId: string;
+    categoryId?: string;
+    questionsData: any[];
+  }): Promise<any> => {
+    const response = await api.post('/admin/questions/bulk-create', data);
+    return response.data;
+  },
+  uploadBulk: async (formData: FormData): Promise<any> => {
+    const response = await api.post('/admin/questions/upload-bulk', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+  parseDocx: async (formData: FormData): Promise<any> => {
+    const response = await api.post('/admin/questions/parse-docx', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+  validateDocx: async (formData: FormData): Promise<any> => {
+    const response = await api.post('/admin/questions/validate-docx', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+  checkDuplicates: async (questions: string[], categoryId: string): Promise<{ duplicates: string[] }> => {
+    const response = await api.post('/admin/questions/check-duplicates', {
+      questions,
+      categoryId
+    });
     return response.data;
   },
 };
@@ -182,26 +282,26 @@ export const questionsApi = {
 // Users API
 export const usersApi = {
   getAll: async (params?: { page?: number; limit?: number }): Promise<PaginatedResponse<User>> => {
-    const response = await api.get('/users', { params });
+    const response = await api.get('/admin/users', { params });
     return response.data;
   },
   getById: async (id: string): Promise<User> => {
-    const response = await api.get(`/users/${id}`);
+    const response = await api.get(`/admin/users/${id}`);
     return response.data;
   },
   toggleStatus: async (id: string): Promise<User> => {
-    const response = await api.patch(`/users/${id}/toggle-status`);
+    const response = await api.patch(`/admin/users/${id}/toggle-status`);
     return response.data;
   },
   delete: async (id: string): Promise<void> => {
-    await api.delete(`/users/${id}`);
+    await api.delete(`/admin/users/${id}`);
   },
 };
 
 // Leaderboard API
 export const leaderboardApi = {
   getTop: async (limit: number = 100): Promise<LeaderboardEntry[]> => {
-    const response = await api.get(`/leaderboard/top/${limit}`);
+    const response = await api.get(`/admin/leaderboard/top/${limit}`);
     return response.data;
   },
 };

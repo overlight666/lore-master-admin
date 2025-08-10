@@ -46,6 +46,8 @@ export default function TopicDetailPage() {
       // Handle subtopics data - it comes paginated with items property
       if (subtopicsData?.items && Array.isArray(subtopicsData.items)) {
         setSubtopics(subtopicsData.items);
+      }else if (subtopicsData?.data && Array.isArray(subtopicsData.data)) {
+        setSubtopics(subtopicsData.data);
       } else if (Array.isArray(subtopicsData)) {
         setSubtopics(subtopicsData);
       } else {
@@ -122,13 +124,13 @@ export default function TopicDetailPage() {
               <p className="mt-1 text-sm text-gray-600">{topic.description}</p>
             </div>
             <div className="flex space-x-3">
-              <button
+              {/* <button
                 onClick={() => setShowDocxUpload(true)}
                 className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
               >
                 <Upload className="h-4 w-4 mr-2" />
                 Import Questions
-              </button>
+              </button> */}
               <button
                 onClick={() => setShowAddModal(true)}
                 className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"

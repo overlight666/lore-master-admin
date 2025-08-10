@@ -33,8 +33,10 @@ export default function TopicsPage() {
     try {
       const data = await apiService.get('/admin/topics');
       // Handle paginated response format
-      if (data && Array.isArray(data.items)) {
+       if (data && Array.isArray(data.items)) {
         setTopics(data.items);
+      } else if (data && Array.isArray(data.data)) {
+        setTopics(data.data);
       } else if (Array.isArray(data)) {
         // Fallback for direct array response
         setTopics(data);

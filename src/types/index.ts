@@ -41,13 +41,36 @@ export interface Subtopic {
   tags?: string[];
   requirements?: string[];
   questionCount?: number;
+  categoriesCount?: number;
+  created_at?: any;
+  updated_at?: any;
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  description: string;
+  subtopic_id: string;
+  topic_id: string;
+  icon_url?: string;
+  color?: string;
+  order?: number;
+  isActive?: boolean;
+  totalLevels?: number;
+  difficulty?: string;
+  estimatedTime?: number;
+  tags?: string[];
+  requirements?: string[];
+  questionCount?: number;
   created_at?: any;
   updated_at?: any;
 }
 
 export interface Level {
   id: string;
+  topic_id: string;
   subtopic_id: string;
+  category_id: string;
   level: number;
   name?: string;
   description?: string;
@@ -68,6 +91,7 @@ export interface Question {
   explanation?: string;
   topic_id: string;
   subtopic_id: string;
+  category_id: string;
   level_id?: string; // Level ID reference
   level: number;
   attempts?: number;
@@ -109,10 +133,23 @@ export interface SubtopicFormData {
   isActive: boolean;
 }
 
-export interface QuestionFormData {
+export interface CategoryFormData {
   subtopic_id: string;
   topic_id: string;
-  text: string;
+  name: string;
+  description: string;
+  order: number;
+  tags: string[];
+  requirements: string[];
+  isActive: boolean;
+}
+
+export interface QuestionFormData {
+  subtopic_id: string;
+  category_id: string;
+  topic_id: string;
+  level_id: string; // Add required level_id field
+  question: string; // Change from 'text' to 'question'
   choices: string[];
   correctAnswer: string;
   explanation?: string;
@@ -133,11 +170,12 @@ export interface ApiResponse<T> {
 }
 
 export interface PaginatedResponse<T> {
-  items: T[];
+  data: T[];
   total: number;
   page: number;
   limit: number;
-  hasMore: boolean;
+  totalPages: number;
+  hasNext: boolean;
 }
 
 // Dashboard Statistics
