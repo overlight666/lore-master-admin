@@ -27,7 +27,6 @@ export default function CreateQuestionPage() {
     correctAnswer: '',
     choices: ['', '', '', ''], // Will include correct answer + wrong answers
     explanation: '',
-    difficulty: 1,
     level_id: '', // Add level_id field
     tags: [] as string[],
     estimatedTime: 60,
@@ -112,6 +111,9 @@ export default function CreateQuestionPage() {
     try {
       setIsSubmitting(true);
       
+      // Get the selected level information
+      const selectedLevel = levels.find(level => level.id === formData.level_id);
+      
       // Create the choices array with correct answer included, filtering out empty choices
       const otherChoices = formData.choices.slice(1).filter(choice => choice.trim() !== '');
       const allChoices = [formData.correctAnswer, ...otherChoices];
@@ -125,7 +127,7 @@ export default function CreateQuestionPage() {
         choices: allChoices,
         correctAnswer: formData.correctAnswer,
         explanation: formData.explanation,
-        difficulty: formData.difficulty,
+        difficulty: selectedLevel?.level || 1, // Use the level's number as difficulty
         tags: formData.tags,
         estimatedTime: formData.estimatedTime,
         isActive: formData.isActive
@@ -288,75 +290,47 @@ export default function CreateQuestionPage() {
               ))}
             </div>
 
-            {/* Difficulty and Level */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Level *
-                </label>
-                <div className="flex gap-2">
-                  <select
-                    value={formData.level_id}
-                    onChange={(e) => handleInputChange('level_id', e.target.value)}
-                    className="flex-1 border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  >
-                    <option value="">
-                      {levels.length === 0 ? 'No levels available - create levels first' : 'Select a level'}
+            {/* Level Selection */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Level *
+              </label>
+              <div className="flex gap-2">
+                <select
+                  value={formData.level_id}
+                  onChange={(e) => handleInputChange('level_id', e.target.value)}
+                  className="flex-1 border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                >
+                  <option value="">
+                    {levels.length === 0 ? 'No levels available - create levels first' : 'Select a level'}
+                  </option>
+                  {levels.map(level => (
+                    <option key={level.id} value={level.id}>
+                      Level {level.level} - {level.name || `${level.totalQuestions} questions`}
                     </option>
-                    {levels.map(level => (
-                      <option key={level.id} value={level.id}>
-                        Level {level.level} - {level.name || `${level.totalQuestions} questions`}
-                      </option>
-                    ))}
-                  </select>
-                  {levels.length === 0 && (
-                    <button
-                      type="button"
-                      onClick={createDefaultLevels}
-                      className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm whitespace-nowrap"
-                      disabled={isLoading}
-                    >
-                      Create Levels
-                    </button>
-                  )}
-                </div>
+                  ))}
+                </select>
                 {levels.length === 0 && (
-                  <p className="text-sm text-gray-500 mt-1">
-                    No levels found for this category. Click "Create Levels" to add default levels.
-                  </p>
+                  <button
+                    type="button"
+                    onClick={createDefaultLevels}
+                    className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm whitespace-nowrap"
+                    disabled={isLoading}
+                  >
+                    Create Levels
+                  </button>
                 )}
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Difficulty (1-10)
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="10"
-                  value={formData.difficulty}
-                  onChange={(e) => handleInputChange('difficulty', parseInt(e.target.value))}
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+              {levels.length === 0 && (
+                <p className="text-sm text-gray-500 mt-1">
+                  No levels found for this category. Click "Create Levels" to add default levels.
+                </p>
+              )}
             </div>
 
-            {/* Estimated Time and Tags */}
+            {/* Estimated Time */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Difficulty (1-10)
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="10"
-                  value={formData.difficulty}
-                  onChange={(e) => handleInputChange('difficulty', parseInt(e.target.value))}
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Estimated Time (seconds)

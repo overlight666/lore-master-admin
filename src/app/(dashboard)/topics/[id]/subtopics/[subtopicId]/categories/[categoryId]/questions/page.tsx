@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import AdminLayout from '@/components/AdminLayout';
 import { ArrowLeft, Plus, Edit, Trash2, BookOpen, ChevronRight, Layers, Target, HelpCircle, Upload, FileText, AlertTriangle, Search } from 'lucide-react';
 import { Topic, Subtopic, Category, Question } from '@/types';
-import { topicsApi, subtopicsApi, categoriesApi, questionsApi } from '@/services/api';
+import { topicsApi, subtopicsApi, categoriesApi, questionsApi, levelsApi } from '@/services/api';
 import toast from 'react-hot-toast';
 
 export default function CategoryQuestionsPage() {
@@ -41,24 +41,40 @@ export default function CategoryQuestionsPage() {
   } | null>(null);
   const [importMethod, setImportMethod] = useState<'file' | 'text'>('file');
 
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [questionsPerPage] = useState(10);
+  const [totalQuestions, setTotalQuestions] = useState(0);
+
   useEffect(() => {
     if (topicId && subtopicId && categoryId) {
       loadData();
     }
-  }, [topicId, subtopicId, categoryId]);
+  }, [topicId, subtopicId, categoryId, currentPage]);
 
   useEffect(() => {
     filterQuestions();
+    // Reset to first page when filters change
+    if (currentPage > 1) {
+      setCurrentPage(1);
+    }
   }, [questions, searchTerm, selectedLevel]);
 
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [topicData, subtopicData, categoryData, questionsData] = await Promise.all([
+      const [topicData, subtopicData, categoryData, questionsData, levelsData] = await Promise.all([
         topicsApi.getById(topicId),
         subtopicsApi.getById(subtopicId),
         categoriesApi.getById(categoryId),
-        questionsApi.getAll({ topicId, subtopicId, categoryId, limit: 1000 })
+        questionsApi.getAll({ 
+          topicId, 
+          subtopicId, 
+          categoryId, 
+          page: currentPage,
+          limit: questionsPerPage
+        }),
+        levelsApi.getAll({ category_id: categoryId, limit: 100 })
       ]);
       
       // Handle data responses
@@ -68,21 +84,42 @@ export default function CategoryQuestionsPage() {
       
       // Handle questions data using our consistent data extraction
       let questionsArray: Question[] = [];
+      let total = 0;
+      
       if (questionsData?.data && Array.isArray(questionsData.data)) {
         questionsArray = questionsData.data;
+        total = questionsData.total || questionsData.data.length;
       } else if (questionsData?.items && Array.isArray(questionsData.items)) {
         questionsArray = questionsData.items;
+        total = questionsData.total || questionsData.items.length;
       } else if (Array.isArray(questionsData)) {
         questionsArray = questionsData;
+        total = questionsData.length;
       }
       
-      setQuestions(questionsArray);
+      // Create a map of level_id to level number
+      const levelsMap = new Map();
+      if (levelsData?.data && Array.isArray(levelsData.data)) {
+        levelsData.data.forEach((level: any) => {
+          levelsMap.set(level.id, level.level);
+        });
+      }
+      
+      // Enhance questions with correct level information
+      const enhancedQuestions = questionsArray.map(question => ({
+        ...question,
+        level: levelsMap.get(question.level_id) || (question as any).difficulty || 1
+      }));
+      
+      setQuestions(enhancedQuestions);
+      setTotalQuestions(total);
       
       // Extract unique levels from questions
-      const uniqueLevels = Array.from(new Set<number>(questionsArray.map((q: Question) => q.level))).sort((a, b) => a - b);
+      const uniqueLevels = Array.from(new Set<number>(enhancedQuestions.map((q: Question) => q.level))).sort((a, b) => a - b);
       setLevels(uniqueLevels);
       
     } catch (error: any) {
+      console.error('Load data error:', error);
       toast.error('Failed to load data');
     } finally {
       setIsLoading(false);
@@ -125,7 +162,7 @@ export default function CategoryQuestionsPage() {
   };
 
   const handleEditQuestion = (questionId: string) => {
-    router.push(`/questions/${questionId}/edit`);
+    router.push(`/topics/${topicId}/subtopics/${subtopicId}/categories/${categoryId}/questions/${questionId}/edit`);
   };
 
   // Bulk import functions
@@ -462,6 +499,16 @@ export default function CategoryQuestionsPage() {
     setImportStep('processing');
 
     try {
+      // Load levels data to map level numbers to level_ids
+      const levelsResponse = await levelsApi.getAll({ category_id: categoryId, limit: 100 });
+      const levels = levelsResponse.data || [];
+      
+      // Create a map from level number to level_id
+      const levelMap = new Map();
+      levels.forEach((level: any) => {
+        levelMap.set(level.level, level.id);
+      });
+      
       // Prepare questions data for bulk import endpoint
       const questionsData = importPreview.map(question => ({
         question: question.question,
@@ -472,8 +519,8 @@ export default function CategoryQuestionsPage() {
         tags: [],
         estimatedTime: 30, // Default 30 seconds
         isActive: true,
-        // Include level_id if available, otherwise let backend generate it
-        level_id: question.level_id || undefined
+        // Map level number to level_id, or use existing level_id if available
+        level_id: levelMap.get(question.level) || question.level_id || undefined
       }));
 
       // Use the bulk-create endpoint through the API service
@@ -573,7 +620,7 @@ export default function CategoryQuestionsPage() {
               <HelpCircle className="h-8 w-8 text-blue-600" />
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Total Questions</p>
-                <p className="text-2xl font-bold text-gray-900">{questions.length}</p>
+                <p className="text-2xl font-bold text-gray-900">{totalQuestions}</p>
               </div>
             </div>
           </div>
@@ -749,6 +796,62 @@ export default function CategoryQuestionsPage() {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* Pagination Controls */}
+            {!isLoading && totalQuestions > questionsPerPage && (
+              <div className="px-6 py-4 border-t border-gray-200">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-gray-700">
+                    Showing {Math.min((currentPage - 1) * questionsPerPage + 1, totalQuestions)} to{' '}
+                    {Math.min(currentPage * questionsPerPage, totalQuestions)} of {totalQuestions} results
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                      disabled={currentPage === 1}
+                      className="px-3 py-2 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Previous
+                    </button>
+                    
+                    <div className="flex items-center space-x-1">
+                      {Array.from({ length: Math.ceil(totalQuestions / questionsPerPage) }, (_, i) => i + 1)
+                        .filter(page => {
+                          // Show current page, first/last page, and pages around current
+                          return page === 1 || 
+                                 page === Math.ceil(totalQuestions / questionsPerPage) || 
+                                 Math.abs(page - currentPage) <= 2;
+                        })
+                        .map((page, index, filteredPages) => (
+                          <div key={page} className="flex items-center">
+                            {index > 0 && filteredPages[index - 1] !== page - 1 && (
+                              <span className="px-2 py-2 text-gray-500">...</span>
+                            )}
+                            <button
+                              onClick={() => setCurrentPage(page)}
+                              className={`px-3 py-2 rounded-md ${
+                                currentPage === page
+                                  ? 'bg-blue-600 text-white'
+                                  : 'border border-gray-300 hover:bg-gray-50'
+                              }`}
+                            >
+                              {page}
+                            </button>
+                          </div>
+                        ))}
+                    </div>
+
+                    <button
+                      onClick={() => setCurrentPage(Math.min(Math.ceil(totalQuestions / questionsPerPage), currentPage + 1))}
+                      disabled={currentPage === Math.ceil(totalQuestions / questionsPerPage)}
+                      className="px-3 py-2 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
           </div>
