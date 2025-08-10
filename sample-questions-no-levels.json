@@ -1,0 +1,27 @@
+[
+  {
+    "question": "What is the largest ocean on Earth?",
+    "choices": ["Atlantic Ocean", "Pacific Ocean", "Indian Ocean", "Arctic Ocean"],
+    "correctAnswer": "Pacific Ocean"
+  },
+  {
+    "question": "Which gas makes up approximately 78% of Earth's atmosphere?",
+    "choices": ["Oxygen", "Carbon Dioxide", "Nitrogen", "Hydrogen"],
+    "correctAnswer": "Nitrogen"
+  },
+  {
+    "question": "What is the smallest unit of matter?",
+    "choices": ["Molecule", "Atom", "Cell", "Proton"],
+    "correctAnswer": "Atom"
+  },
+  {
+    "question": "Who painted the Mona Lisa?",
+    "choices": ["Vincent van Gogh", "Pablo Picasso", "Leonardo da Vinci", "Michelangelo"],
+    "correctAnswer": "Leonardo da Vinci"
+  },
+  {
+    "question": "What is the square root of 64?",
+    "choices": ["6", "7", "8", "9"],
+    "correctAnswer": "8"
+  }
+]

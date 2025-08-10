@@ -170,12 +170,13 @@ export interface ApiResponse<T> {
 }
 
 export interface PaginatedResponse<T> {
-  data: T[];
+  data?: T[];
+  items?: T[]; // Some APIs return items instead of data
   total: number;
   page: number;
   limit: number;
   totalPages: number;
-  hasNext: boolean;
+  hasNext?: boolean;
 }
 
 // Dashboard Statistics

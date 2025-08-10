@@ -256,7 +256,7 @@ export default function TopicDetailPage() {
                         onClick={() => router.push(`/topics/${topicId}/subtopics/${subtopic.id}`)}
                         className="text-blue-600 hover:text-blue-900 text-sm font-medium"
                       >
-                        View Questions
+                        View Categories
                       </button>
                       <button
                         onClick={() => handleEditSubtopic(subtopic)}

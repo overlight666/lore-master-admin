@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import AdminLayout from '@/components/AdminLayout';
 import { levelsApi, topicsApi, subtopicsApi, categoriesApi } from '@/services/api';
 import { Level, Topic, Subtopic, Category, PaginatedResponse } from '@/types';
+import toast from 'react-hot-toast';
 import {
   Plus,
   Search,
@@ -30,9 +31,13 @@ export default function LevelsPage() {
   const [selectedTopic, setSelectedTopic] = useState(searchParams?.get('topicId') || '');
   const [selectedSubtopic, setSelectedSubtopic] = useState(searchParams?.get('subtopicId') || '');
   const [selectedCategory, setSelectedCategory] = useState(searchParams?.get('categoryId') || '');
+  const [selectedLevel, setSelectedLevel] = useState(searchParams?.get('level') || '');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingLevel, setEditingLevel] = useState<Level | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   
   const limit = 10;
 
@@ -45,12 +50,16 @@ export default function LevelsPage() {
         search: searchTerm || undefined
       };
       
-      if (selectedTopic) params.topicId = selectedTopic;
-      if (selectedSubtopic) params.subtopicId = selectedSubtopic;
-      if (selectedCategory) params.categoryId = selectedCategory;
+      // Use correct parameter names with underscores
+      if (selectedTopic) params.topic_id = selectedTopic;
+      if (selectedSubtopic) params.subtopic_id = selectedSubtopic;
+      if (selectedCategory) params.category_id = selectedCategory;
+      if (selectedLevel) params.level = selectedLevel;
 
       const response: PaginatedResponse<Level> = await levelsApi.getAll(params);
-      setLevels(response.data || []);
+      // Handle both response formats - some APIs return 'data', others return 'items'
+      const levelsData = response.items || response.data || [];
+      setLevels(levelsData);
       setTotal(response.total || 0);
       setTotalPages(Math.ceil((response.total || 0) / limit));
     } catch (error) {
@@ -66,7 +75,9 @@ export default function LevelsPage() {
   const fetchTopics = async () => {
     try {
       const response = await topicsApi.getAll({ limit: 100 });
-      setTopics(response.data || []);
+      // Handle both response formats - some APIs return 'data', others return 'items'
+      const topicsData = response.items || response.data || [];
+      setTopics(topicsData);
     } catch (error) {
       console.error('Failed to fetch topics:', error);
       setTopics([]); // Set empty array on error to prevent crashes
@@ -76,10 +87,12 @@ export default function LevelsPage() {
   const fetchSubtopics = async () => {
     try {
       const params: any = { limit: 100 };
-      if (selectedTopic) params.topicId = selectedTopic;
+      if (selectedTopic) params.topic_id = selectedTopic;
       
       const response = await subtopicsApi.getAll(params);
-      setSubtopics(response.data || []);
+      // Handle both response formats - some APIs return 'data', others return 'items'
+      const subtopicsData = response.items || response.data || [];
+      setSubtopics(subtopicsData);
     } catch (error) {
       console.error('Failed to fetch subtopics:', error);
       setSubtopics([]); // Set empty array on error to prevent crashes
@@ -89,11 +102,13 @@ export default function LevelsPage() {
   const fetchCategories = async () => {
     try {
       const params: any = { limit: 100 };
-      if (selectedTopic) params.topicId = selectedTopic;
-      if (selectedSubtopic) params.subtopicId = selectedSubtopic;
+      if (selectedTopic) params.topic_id = selectedTopic;
+      if (selectedSubtopic) params.subtopic_id = selectedSubtopic;
       
       const response = await categoriesApi.getAll(params);
-      setCategories(response.data || []);
+      // Handle both response formats - some APIs return 'data', others return 'items'
+      const categoriesData = response.items || response.data || [];
+      setCategories(categoriesData);
     } catch (error) {
       console.error('Failed to fetch categories:', error);
       setCategories([]); // Set empty array on error to prevent crashes
@@ -117,7 +132,7 @@ export default function LevelsPage() {
 
   useEffect(() => {
     fetchLevels();
-  }, [currentPage, searchTerm, selectedTopic, selectedSubtopic, selectedCategory]);
+  }, [currentPage, searchTerm, selectedTopic, selectedSubtopic, selectedCategory, selectedLevel]);
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this level?')) return;
@@ -161,7 +176,7 @@ export default function LevelsPage() {
             <p className="text-gray-600 mt-1">Manage levels within categories</p>
           </div>
           <button
-            onClick={() => router.push('/levels/create')}
+            onClick={() => setShowCreateModal(true)}
             className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 transition-colors"
           >
             <Plus className="h-5 w-5" />
@@ -184,7 +199,7 @@ export default function LevelsPage() {
 
         {/* Filters */}
         <div className="bg-white p-6 rounded-lg border">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
               <input
@@ -231,12 +246,24 @@ export default function LevelsPage() {
               ))}
             </select>
 
+            <select
+              value={selectedLevel}
+              onChange={(e) => setSelectedLevel(e.target.value)}
+              className="border border-gray-300 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All Levels</option>
+              {[1, 2, 3, 4, 5].map(levelNum => (
+                <option key={levelNum} value={levelNum.toString()}>Level {levelNum}</option>
+              ))}
+            </select>
+
             <button
               onClick={() => {
                 setSearchTerm('');
                 setSelectedTopic('');
                 setSelectedSubtopic('');
                 setSelectedCategory('');
+                setSelectedLevel('');
                 setCurrentPage(1);
               }}
               className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors"
@@ -335,7 +362,10 @@ export default function LevelsPage() {
                               <Eye className="h-4 w-4" />
                             </button>
                             <button
-                              onClick={() => router.push(`/levels/${level.id}/edit`)}
+                              onClick={() => {
+                                setEditingLevel(level);
+                                setShowEditModal(true);
+                              }}
                               className="text-green-600 hover:text-green-900"
                               title="Edit"
                             >
@@ -436,6 +466,691 @@ export default function LevelsPage() {
           )}
         </div>
       </div>
+
+      {/* Edit Level Modal */}
+      {showEditModal && editingLevel && (
+        <EditLevelModal
+          level={editingLevel}
+          topics={topics}
+          subtopics={subtopics}
+          categories={categories}
+          existingLevels={levels}
+          onClose={() => {
+            setShowEditModal(false);
+            setEditingLevel(null);
+          }}
+          onSave={(updatedLevel: Level) => {
+            // Update the level in the list
+            setLevels(prevLevels => 
+              prevLevels.map(level => 
+                level.id === updatedLevel.id ? updatedLevel : level
+              )
+            );
+            setShowEditModal(false);
+            setEditingLevel(null);
+          }}
+        />
+      )}
+
+      {/* Create Level Modal */}
+      {showCreateModal && (
+        <CreateLevelModal
+          topics={topics}
+          subtopics={subtopics}
+          categories={categories}
+          existingLevels={levels}
+          onClose={() => setShowCreateModal(false)}
+          onSave={(newLevel: Level) => {
+            setLevels(prevLevels => [...prevLevels, newLevel]);
+            setShowCreateModal(false);
+            setTotal(prevTotal => prevTotal + 1);
+          }}
+        />
+      )}
     </AdminLayout>
+  );
+}
+
+// Edit Level Modal Component
+interface EditLevelModalProps {
+  level: Level;
+  topics: Topic[];
+  subtopics: Subtopic[];
+  categories: Category[];
+  existingLevels: Level[];
+  onClose: () => void;
+  onSave: (updatedLevel: Level) => void;
+}
+
+function EditLevelModal({ level, topics, subtopics, categories, existingLevels, onClose, onSave }: EditLevelModalProps) {
+  const [formData, setFormData] = useState({
+    level: level.level.toString(),
+    name: level.name || '',
+    description: level.description || '',
+    totalQuestions: level.totalQuestions.toString(),
+    passingScore: level.passingScore.toString(),
+    isActive: level.isActive,
+    topic_id: level.topic_id,
+    subtopic_id: level.subtopic_id,
+    category_id: level.category_id,
+  });
+  const [isLoading, setIsLoading] = useState(false);
+  const [validationError, setValidationError] = useState('');
+
+  const validateLevelUniqueness = (categoryId: string, levelNumber: number) => {
+    // Allow the current level to keep its number, but check for conflicts with others
+    return !existingLevels.some(existingLevel => 
+      existingLevel.category_id === categoryId && 
+      existingLevel.level === levelNumber &&
+      existingLevel.id !== level.id  // Exclude current level from check
+    );
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setValidationError('');
+    setIsLoading(true);
+
+    const levelNumber = parseInt(formData.level);
+    
+    // Validate level uniqueness within the category
+    if (!validateLevelUniqueness(formData.category_id, levelNumber)) {
+      setValidationError(`Level ${levelNumber} already exists for this category. Each level must be unique within a category.`);
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      const updatedLevel = await levelsApi.update(level.id, {
+        level: parseInt(formData.level),
+        name: formData.name,
+        description: formData.description,
+        totalQuestions: parseInt(formData.totalQuestions),
+        passingScore: parseInt(formData.passingScore),
+        isActive: formData.isActive,
+        topic_id: formData.topic_id,
+        subtopic_id: formData.subtopic_id,
+        category_id: formData.category_id,
+      });
+
+      toast.success('Level updated successfully');
+      onSave(updatedLevel);
+    } catch (error: any) {
+      console.error('Error updating level:', error);
+      if (error.message?.includes('already exists')) {
+        setValidationError('This level already exists for the selected category. Each level must be unique within a category.');
+      } else {
+        toast.error('Failed to update level');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleInputChange = (field: string, value: any) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    // Clear validation error when user makes changes
+    if (validationError) setValidationError('');
+  };
+
+  const filteredSubtopics = subtopics.filter(s => s.topic_id === formData.topic_id);
+  const filteredCategories = categories.filter(c => c.subtopic_id === formData.subtopic_id);
+
+  // Get existing levels for the selected category to show what's already taken
+  const existingLevelsForCategory = formData.category_id 
+    ? existingLevels.filter(existingLevel => 
+        existingLevel.category_id === formData.category_id && existingLevel.id !== level.id
+      ).map(existingLevel => existingLevel.level)
+    : [];
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold text-gray-900">Edit Level</h2>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600"
+            disabled={isLoading}
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Validation Error */}
+        {validationError && (
+          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-sm text-red-600">{validationError}</p>
+          </div>
+        )}
+
+        {/* Show existing levels for selected category */}
+        {formData.category_id && existingLevelsForCategory.length > 0 && (
+          <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <p className="text-sm text-yellow-800 mb-2">
+              <strong>Other levels for this category:</strong> {existingLevelsForCategory.sort((a, b) => a - b).join(', ')}
+            </p>
+            <p className="text-xs text-yellow-600">
+              Make sure your level number doesn't conflict with existing ones.
+            </p>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Topic Selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Topic *
+            </label>
+            <select
+              value={formData.topic_id}
+              onChange={(e) => {
+                handleInputChange('topic_id', e.target.value);
+                handleInputChange('subtopic_id', '');
+                handleInputChange('category_id', '');
+              }}
+              className="w-full border border-gray-300 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
+            >
+              <option value="">Select Topic</option>
+              {topics.map(topic => (
+                <option key={topic.id} value={topic.id}>{topic.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Subtopic Selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Subtopic *
+            </label>
+            <select
+              value={formData.subtopic_id}
+              onChange={(e) => {
+                handleInputChange('subtopic_id', e.target.value);
+                handleInputChange('category_id', '');
+              }}
+              className="w-full border border-gray-300 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={!formData.topic_id}
+              required
+            >
+              <option value="">Select Subtopic</option>
+              {filteredSubtopics.map(subtopic => (
+                <option key={subtopic.id} value={subtopic.id}>{subtopic.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Category Selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Category *
+            </label>
+            <select
+              value={formData.category_id}
+              onChange={(e) => handleInputChange('category_id', e.target.value)}
+              className="w-full border border-gray-300 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={!formData.subtopic_id}
+              required
+            >
+              <option value="">Select Category</option>
+              {filteredCategories.map(category => (
+                <option key={category.id} value={category.id}>{category.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Level Number */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Level Number *
+              </label>
+              <input
+                type="number"
+                value={formData.level}
+                onChange={(e) => handleInputChange('level', e.target.value)}
+                className="w-full border border-gray-300 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                min="1"
+                max="10"
+                required
+              />
+            </div>
+
+            {/* Passing Score */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Passing Score (%) *
+              </label>
+              <input
+                type="number"
+                value={formData.passingScore}
+                onChange={(e) => handleInputChange('passingScore', e.target.value)}
+                className="w-full border border-gray-300 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                min="0"
+                max="100"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Total Questions */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Total Questions *
+              </label>
+              <input
+                type="number"
+                value={formData.totalQuestions}
+                onChange={(e) => handleInputChange('totalQuestions', e.target.value)}
+                className="w-full border border-gray-300 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                min="1"
+                required
+              />
+            </div>
+
+            {/* Active Status */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Status
+              </label>
+              <div className="flex items-center space-x-4 pt-2">
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    checked={formData.isActive}
+                    onChange={() => handleInputChange('isActive', true)}
+                    className="mr-2"
+                  />
+                  Active
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    checked={!formData.isActive}
+                    onChange={() => handleInputChange('isActive', false)}
+                    className="mr-2"
+                  />
+                  Inactive
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {/* Name */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Name
+            </label>
+            <input
+              type="text"
+              value={formData.name}
+              onChange={(e) => handleInputChange('name', e.target.value)}
+              className="w-full border border-gray-300 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Optional level name"
+            />
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Description
+            </label>
+            <textarea
+              value={formData.description}
+              onChange={(e) => handleInputChange('description', e.target.value)}
+              className="w-full border border-gray-300 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              rows={3}
+              placeholder="Optional description"
+            />
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex justify-end space-x-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              disabled={isLoading}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? 'Updating...' : 'Update Level'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// Create Level Modal Component
+interface CreateLevelModalProps {
+  topics: Topic[];
+  subtopics: Subtopic[];
+  categories: Category[];
+  existingLevels: Level[];
+  onClose: () => void;
+  onSave: (newLevel: Level) => void;
+}
+
+function CreateLevelModal({ topics, subtopics, categories, existingLevels, onClose, onSave }: CreateLevelModalProps) {
+  const [formData, setFormData] = useState({
+    level: '',
+    name: '',
+    description: '',
+    totalQuestions: '10',
+    passingScore: '80',
+    isActive: true,
+    topic_id: '',
+    subtopic_id: '',
+    category_id: '',
+  });
+  const [isLoading, setIsLoading] = useState(false);
+  const [validationError, setValidationError] = useState('');
+
+  const validateLevelUniqueness = (categoryId: string, levelNumber: number) => {
+    return !existingLevels.some(level => 
+      level.category_id === categoryId && level.level === levelNumber
+    );
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setValidationError('');
+    setIsLoading(true);
+
+    const levelNumber = parseInt(formData.level);
+    
+    // Validate required fields
+    if (!formData.topic_id || !formData.subtopic_id || !formData.category_id || !formData.level) {
+      setValidationError('Please fill in all required fields');
+      setIsLoading(false);
+      return;
+    }
+
+    // Validate level uniqueness within the category
+    if (!validateLevelUniqueness(formData.category_id, levelNumber)) {
+      setValidationError(`Level ${levelNumber} already exists for this category. Each level must be unique within a category.`);
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      const newLevel = await levelsApi.create({
+        level: levelNumber,
+        name: formData.name || undefined,
+        description: formData.description || undefined,
+        totalQuestions: parseInt(formData.totalQuestions),
+        passingScore: parseInt(formData.passingScore),
+        isActive: formData.isActive,
+        topic_id: formData.topic_id,
+        subtopic_id: formData.subtopic_id,
+        category_id: formData.category_id,
+      });
+
+      toast.success('Level created successfully');
+      onSave(newLevel);
+    } catch (error: any) {
+      console.error('Error creating level:', error);
+      if (error.message?.includes('already exists')) {
+        setValidationError('This level already exists for the selected category. Each level must be unique within a category.');
+      } else {
+        toast.error('Failed to create level');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleInputChange = (field: string, value: any) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    // Clear validation error when user makes changes
+    if (validationError) setValidationError('');
+  };
+
+  const filteredSubtopics = subtopics.filter(s => s.topic_id === formData.topic_id);
+  const filteredCategories = categories.filter(c => c.subtopic_id === formData.subtopic_id);
+
+  // Get existing levels for the selected category to show what's already taken
+  const existingLevelsForCategory = formData.category_id 
+    ? existingLevels.filter(level => level.category_id === formData.category_id).map(level => level.level)
+    : [];
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold text-gray-900">Create New Level</h2>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600"
+            disabled={isLoading}
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Validation Error */}
+        {validationError && (
+          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-sm text-red-600">{validationError}</p>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Topic Selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Topic *
+            </label>
+            <select
+              value={formData.topic_id}
+              onChange={(e) => {
+                handleInputChange('topic_id', e.target.value);
+                handleInputChange('subtopic_id', '');
+                handleInputChange('category_id', '');
+              }}
+              className="w-full border border-gray-300 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
+            >
+              <option value="">Select Topic</option>
+              {topics.map(topic => (
+                <option key={topic.id} value={topic.id}>{topic.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Subtopic Selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Subtopic *
+            </label>
+            <select
+              value={formData.subtopic_id}
+              onChange={(e) => {
+                handleInputChange('subtopic_id', e.target.value);
+                handleInputChange('category_id', '');
+              }}
+              className="w-full border border-gray-300 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={!formData.topic_id}
+              required
+            >
+              <option value="">Select Subtopic</option>
+              {filteredSubtopics.map(subtopic => (
+                <option key={subtopic.id} value={subtopic.id}>{subtopic.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Category Selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Category *
+            </label>
+            <select
+              value={formData.category_id}
+              onChange={(e) => handleInputChange('category_id', e.target.value)}
+              className="w-full border border-gray-300 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={!formData.subtopic_id}
+              required
+            >
+              <option value="">Select Category</option>
+              {filteredCategories.map(category => (
+                <option key={category.id} value={category.id}>{category.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Show existing levels for selected category */}
+          {formData.category_id && existingLevelsForCategory.length > 0 && (
+            <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <p className="text-sm text-yellow-800 mb-2">
+                <strong>Existing levels for this category:</strong> {existingLevelsForCategory.sort((a, b) => a - b).join(', ')}
+              </p>
+              <p className="text-xs text-yellow-600">
+                Choose a level number that isn't already used.
+              </p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Level Number */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Level Number *
+              </label>
+              <input
+                type="number"
+                value={formData.level}
+                onChange={(e) => handleInputChange('level', e.target.value)}
+                className="w-full border border-gray-300 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                min="1"
+                max="10"
+                required
+                placeholder="e.g. 1, 2, 3..."
+              />
+            </div>
+
+            {/* Passing Score */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Passing Score (%) *
+              </label>
+              <input
+                type="number"
+                value={formData.passingScore}
+                onChange={(e) => handleInputChange('passingScore', e.target.value)}
+                className="w-full border border-gray-300 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                min="0"
+                max="100"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Total Questions */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Total Questions *
+              </label>
+              <input
+                type="number"
+                value={formData.totalQuestions}
+                onChange={(e) => handleInputChange('totalQuestions', e.target.value)}
+                className="w-full border border-gray-300 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                min="1"
+                required
+              />
+            </div>
+
+            {/* Active Status */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Status
+              </label>
+              <div className="flex items-center space-x-4 pt-2">
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    checked={formData.isActive}
+                    onChange={() => handleInputChange('isActive', true)}
+                    className="mr-2"
+                  />
+                  Active
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    checked={!formData.isActive}
+                    onChange={() => handleInputChange('isActive', false)}
+                    className="mr-2"
+                  />
+                  Inactive
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {/* Name */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Name
+            </label>
+            <input
+              type="text"
+              value={formData.name}
+              onChange={(e) => handleInputChange('name', e.target.value)}
+              className="w-full border border-gray-300 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Optional level name"
+            />
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Description
+            </label>
+            <textarea
+              value={formData.description}
+              onChange={(e) => handleInputChange('description', e.target.value)}
+              className="w-full border border-gray-300 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              rows={3}
+              placeholder="Optional description"
+            />
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex justify-end space-x-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              disabled={isLoading}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? 'Creating...' : 'Create Level'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }

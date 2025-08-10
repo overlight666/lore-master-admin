@@ -52,11 +52,49 @@ export default function CreateQuestionPage() {
       setSubtopic(subtopicRes);
       setCategory(categoryRes);
       setLevels(levelsRes.data || []);
+      
+      // If no levels exist, create some default levels
+      if (!levelsRes.data || levelsRes.data.length === 0) {
+        await createDefaultLevels();
+      }
     } catch (error) {
       console.error('Error loading data:', error);
       toast.error('Failed to load data');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const createDefaultLevels = async () => {
+    try {
+      const defaultLevels = [
+        { level: 1, name: 'Beginner', totalQuestions: 10, passingScore: 70 },
+        { level: 2, name: 'Intermediate', totalQuestions: 15, passingScore: 75 },
+        { level: 3, name: 'Advanced', totalQuestions: 20, passingScore: 80 },
+      ];
+
+      const createdLevels = [];
+      for (const levelData of defaultLevels) {
+        try {
+          const level = await levelsApi.create({
+            topic_id: topicId,
+            subtopic_id: subtopicId,
+            category_id: categoryId,
+            ...levelData,
+            isActive: true
+          });
+          createdLevels.push(level);
+        } catch (error) {
+          // Skip failed level creation
+        }
+      }
+      
+      if (createdLevels.length > 0) {
+        setLevels(createdLevels);
+        toast.success(`Created ${createdLevels.length} default levels`);
+      }
+    } catch (error) {
+      toast.error('Failed to create default levels');
     }
   };
 
@@ -96,7 +134,6 @@ export default function CreateQuestionPage() {
       toast.success('Question created successfully');
       router.push(`/topics/${topicId}/subtopics/${subtopicId}/categories/${categoryId}/questions`);
     } catch (error: any) {
-      console.error('Error creating question:', error);
       toast.error('Failed to create question');
     } finally {
       setIsSubmitting(false);
@@ -257,19 +294,38 @@ export default function CreateQuestionPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Level *
                 </label>
-                <select
-                  value={formData.level_id}
-                  onChange={(e) => handleInputChange('level_id', e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                >
-                  <option value="">Select a level</option>
-                  {levels.map(level => (
-                    <option key={level.id} value={level.id}>
-                      Level {level.level} - {level.name || `${level.totalQuestions} questions`}
+                <div className="flex gap-2">
+                  <select
+                    value={formData.level_id}
+                    onChange={(e) => handleInputChange('level_id', e.target.value)}
+                    className="flex-1 border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  >
+                    <option value="">
+                      {levels.length === 0 ? 'No levels available - create levels first' : 'Select a level'}
                     </option>
-                  ))}
-                </select>
+                    {levels.map(level => (
+                      <option key={level.id} value={level.id}>
+                        Level {level.level} - {level.name || `${level.totalQuestions} questions`}
+                      </option>
+                    ))}
+                  </select>
+                  {levels.length === 0 && (
+                    <button
+                      type="button"
+                      onClick={createDefaultLevels}
+                      className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm whitespace-nowrap"
+                      disabled={isLoading}
+                    >
+                      Create Levels
+                    </button>
+                  )}
+                </div>
+                {levels.length === 0 && (
+                  <p className="text-sm text-gray-500 mt-1">
+                    No levels found for this category. Click "Create Levels" to add default levels.
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">

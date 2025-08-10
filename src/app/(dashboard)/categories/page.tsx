@@ -46,7 +46,9 @@ export default function CategoriesPage() {
       if (selectedSubtopic) params.subtopic_id = selectedSubtopic;
 
       const response: PaginatedResponse<Category> = await categoriesApi.getAll(params);
-      setCategories(response.data || []);
+      // Handle both response formats - some APIs return 'data', others return 'items'
+      const categoriesData = response.items || response.data || [];
+      setCategories(categoriesData);
       setTotal(response.total || 0);
       setTotalPages(Math.ceil((response.total || 0) / limit));
     } catch (error) {
@@ -62,7 +64,9 @@ export default function CategoriesPage() {
   const fetchTopics = async () => {
     try {
       const response = await topicsApi.getAll({ limit: 100 });
-      setTopics(response.data || []);
+      // Handle both response formats - some APIs return 'data', others return 'items'
+      const topicsData = response.items || response.data || [];
+      setTopics(topicsData);
     } catch (error) {
       console.error('Failed to fetch topics:', error);
       setTopics([]);
@@ -75,7 +79,9 @@ export default function CategoriesPage() {
       if (selectedTopic) params.topic_id = selectedTopic;
       
       const response = await subtopicsApi.getAll(params);
-      setSubtopics(response.data || []);
+      // Handle both response formats - some APIs return 'data', others return 'items'
+      const subtopicsData = response.items || response.data || [];
+      setSubtopics(subtopicsData);
     } catch (error) {
       console.error('Failed to fetch subtopics:', error);
       setSubtopics([]);

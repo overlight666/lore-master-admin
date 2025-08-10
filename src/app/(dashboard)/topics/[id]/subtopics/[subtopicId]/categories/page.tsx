@@ -32,19 +32,11 @@ export default function SubtopicCategoriesPage() {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      console.log('🔍 Loading categories data with params:', { topicId, subtopicId });
-      
       const [topicData, subtopicData, categoriesData] = await Promise.all([
         apiService.get(`/admin/topics/${topicId}`),
         apiService.get(`/admin/subtopics/${subtopicId}`),
         categoriesApi.getAll({ topic_id: topicId, subtopic_id: subtopicId })
       ]);
-      
-      console.log('📊 API Responses:', { 
-        topicData: topicData?.topic || topicData,
-        subtopicData: subtopicData?.subtopic || subtopicData,
-        categoriesData 
-      });
       
       // Handle topic data
       setTopic(topicData?.topic || topicData);
@@ -53,8 +45,11 @@ export default function SubtopicCategoriesPage() {
       setSubtopic(subtopicData?.subtopic || subtopicData);
       
       // Handle categories data
-      const categoryList = categoriesData.data || categoriesData || [];
-      console.log('🏷️ Setting categories:', categoryList);
+      const categoryList = Array.isArray(categoriesData?.data) 
+        ? categoriesData.data 
+        : Array.isArray(categoriesData) 
+        ? categoriesData 
+        : [];
       setCategories(categoryList);
     } catch (error: any) {
       console.error('Error loading data:', error);

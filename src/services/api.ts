@@ -240,10 +240,20 @@ export const questionsApi = {
   bulkCreate: async (data: {
     topicId: string;
     subtopicId: string;
-    categoryId?: string;
+    categoryId: string;
     questionsData: any[];
   }): Promise<any> => {
     const response = await api.post('/admin/questions/bulk-create', data);
+    return response.data;
+  },
+  bulkImport: async (data: {
+    questions: any[];
+    levelId?: string;
+    categoryId?: string;
+    subtopicId?: string;
+    topicId?: string;
+  }): Promise<any> => {
+    const response = await api.post('/admin/questions/import', data);
     return response.data;
   },
   uploadBulk: async (formData: FormData): Promise<any> => {

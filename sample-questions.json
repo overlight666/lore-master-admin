@@ -1,0 +1,43 @@
+[
+  {
+    "question": "What is the capital of France?",
+    "choices": ["Paris", "London", "Berlin", "Madrid"],
+    "correctAnswer": "Paris",
+    "level": 1,
+    "explanation": "France's capital and largest city"
+  },
+  {
+    "question": "What is 2 + 2?",
+    "choices": ["3", "4", "5", "6"],
+    "correctAnswer": "4",
+    "level": 1,
+    "explanation": "Basic addition problem"
+  },
+  {
+    "question": "Which planet is closest to the Sun?",
+    "choices": ["Mercury", "Venus", "Earth", "Mars"],
+    "correctAnswer": "Mercury",
+    "level": 2,
+    "explanation": "Mercury is the innermost planet in our solar system"
+  },
+  {
+    "question": "What is the chemical symbol for water?",
+    "choices": ["H2O", "CO2", "NaCl", "O2"],
+    "correctAnswer": "H2O",
+    "level": 2,
+    "explanation": "Water is composed of two hydrogen atoms and one oxygen atom"
+  },
+  {
+    "question": "Who wrote Romeo and Juliet?",
+    "choices": ["William Shakespeare", "Charles Dickens", "Jane Austen", "Mark Twain"],
+    "correctAnswer": "William Shakespeare",
+    "level": 3,
+    "explanation": "Shakespeare's famous tragedy written in the early 1590s"
+  },
+  {
+    "question": "What is the largest mammal in the world?",
+    "choices": ["African Elephant", "Blue Whale", "Giraffe", "Hippopotamus"],
+    "correctAnswer": "Blue Whale",
+    "explanation": "Blue whales can grow up to 100 feet long and weigh up to 200 tons"
+  }
+]

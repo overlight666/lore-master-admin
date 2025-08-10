@@ -188,62 +188,25 @@ export default function CategoryQuestionsPage() {
   };
 
   const parseText = (text: string): any[] => {
-    // First try to parse as JSON
-    try {
-      const jsonData = JSON.parse(text.trim());
-      if (Array.isArray(jsonData)) {
-        // If levels are not defined, randomly distribute across levels 1-3
-        return jsonData.map(item => ({
-          ...item,
-          level: item.level || Math.floor(Math.random() * 3) + 1
-        }));
-      } else if (typeof jsonData === 'object') {
-        // Single object, convert to array
-        return [{
-          ...jsonData,
-          level: jsonData.level || Math.floor(Math.random() * 3) + 1
-        }];
-      }
-    } catch (error) {
-      // Not JSON, continue with text parsing
-    }
-
-    // Text parsing logic for the structured format
     const data: any[] = [];
     const lines = text.split('\n').map(line => line.trim()).filter(line => line);
     
     let currentQuestion: any = null;
-    let hasDefinedLevels = false;
-    
-    // Check if any questions have defined difficulty levels
-    for (const line of lines) {
-      if (line.match(/^Question\s+\d+\s*[–-]\s*\((\w+)\)/i)) {
-        hasDefinedLevels = true;
-        break;
-      }
-    }
     
     for (const line of lines) {
-      // Match question pattern: "Question X – (Difficulty)" or just "Question X"
-      const questionMatchWithDifficulty = line.match(/^Question\s+\d+\s*[–-]\s*\((\w+)\)/i);
-      const questionMatchSimple = line.match(/^Question\s+\d+/i);
-      
-      if (questionMatchWithDifficulty || questionMatchSimple) {
+      // Match question pattern: "Question X – (Difficulty)"
+      const questionMatch = line.match(/^Question\s+\d+\s*[–-]\s*\((\w+)\)/i);
+      if (questionMatch) {
         // Save previous question if exists
         if (currentQuestion && currentQuestion.question && currentQuestion.correctAnswer) {
           data.push(currentQuestion);
         }
         
         // Start new question
+        const difficulty = questionMatch[1].toLowerCase();
         let level = 1;
-        if (questionMatchWithDifficulty) {
-          const difficulty = questionMatchWithDifficulty[1].toLowerCase();
-          if (difficulty === 'medium') level = 2;
-          else if (difficulty === 'hard') level = 3;
-        } else if (!hasDefinedLevels) {
-          // If no levels are defined in the entire text, randomly assign
-          level = Math.floor(Math.random() * 3) + 1;
-        }
+        if (difficulty === 'medium') level = 2;
+        else if (difficulty === 'hard') level = 3;
         
         currentQuestion = {
           level,
@@ -332,8 +295,8 @@ export default function CategoryQuestionsPage() {
           errors.push(`Question ${questionNum}: Missing question text`);
         }
         
-        if (!item.choices || item.choices.length < 2) {
-          errors.push(`Question ${questionNum}: Must have at least 2 choices`);
+        if (!item.choices || item.choices.length < 4) {
+          errors.push(`Question ${questionNum}: Must have 4 choices (A, B, C, D)`);
         }
         
         if (!item.correctAnswer) {
@@ -462,31 +425,33 @@ export default function CategoryQuestionsPage() {
     setImportStep('processing');
 
     try {
-      // Prepare questions data for bulk import endpoint
-      const questionsData = importPreview.map(question => ({
-        question: question.question,
-        choices: question.choices || [],
-        correctAnswer: question.correctAnswer,
-        explanation: question.explanation || '',
-        difficulty: question.level,
-        tags: [],
-        estimatedTime: 30, // Default 30 seconds
-        isActive: true,
-        // Include level_id if available, otherwise let backend generate it
-        level_id: question.level_id || undefined
-      }));
+      let successCount = 0;
+      let failCount = 0;
 
-      // Use the bulk-create endpoint through the API service
-      const result = await questionsApi.bulkCreate({
-        topicId,
-        subtopicId,
-        categoryId,
-        questionsData
-      });
+      // Import questions one by one to handle individual failures
+      for (const question of importPreview) {
+        try {
+          const questionData = {
+            subtopic_id: subtopicId,
+            category_id: categoryId,
+            topic_id: topicId,
+            level_id: '',  // Will need to be set based on level mapping
+            question: question.question,
+            choices: question.choices || [],
+            correctAnswer: question.correctAnswer,
+            explanation: question.explanation || '',
+            difficulty: question.level,
+            tags: [],
+            estimatedTime: 30, // Default 30 seconds
+            isActive: true
+          };
 
-      // Handle the response from bulk-create endpoint
-      const successCount = result.createdQuestions?.length || importPreview.length;
-      const failCount = result.errors?.length || 0;
+          await questionsApi.create(questionData);
+          successCount++;
+        } catch (error) {
+          failCount++;
+        }
+      }
 
       if (successCount > 0) {
         toast.success(`Successfully imported ${successCount} questions`);
@@ -495,18 +460,13 @@ export default function CategoryQuestionsPage() {
       
       if (failCount > 0) {
         toast.error(`Failed to import ${failCount} questions`);
-        // Optionally show detailed errors
-        if (result.errors?.length > 0) {
-          console.error('Import errors:', result.errors);
-        }
       }
 
       // Reset bulk import state
       resetBulkImport();
       
     } catch (error) {
-      console.error('Bulk import error:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to import questions');
+      toast.error('Failed to import questions');
     } finally {
       setIsProcessingImport(false);
     }
@@ -890,12 +850,7 @@ export default function CategoryQuestionsPage() {
                             setPastedText(e.target.value);
                             validatePastedText(e.target.value);
                           }}
-                          placeholder="Paste your questions here...
-
-You can paste either:
-1. Structured text format (Question 1 – (Easy)...)
-2. JSON array format ([{&quot;question&quot;: &quot;...&quot;, &quot;choices&quot;: [...], ...}])
-3. Single JSON object ({&quot;question&quot;: &quot;...&quot;, &quot;choices&quot;: [...], ...})"
+                          placeholder="Paste your questions here..."
                           rows={15}
                           className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
@@ -949,51 +904,17 @@ You can paste either:
 
                       {/* Text Format Instructions */}
                       <div className="mb-6">
-                        <h3 className="text-lg font-medium text-gray-900 mb-3">Supported Text Formats</h3>
-                        
-                        <div className="space-y-4">
-                          {/* Structured Text Format */}
-                          <div>
-                            <h4 className="font-medium text-gray-700 mb-2">Structured Text Format:</h4>
-                            <div className="bg-gray-50 p-4 rounded-lg text-sm">
-                              <div className="font-medium mb-2">Expected Format:</div>
-                              <div className="font-mono space-y-1 text-xs">
-                                <div>Question 1 – (Easy)</div>
-                                <div>Who is known as the Firebrand?</div>
-                                <div>A) Liliana Vess  B) Chandra Nalaar  C) Jaya Ballard  D) Elspeth Tirel</div>
-                                <div>Answer: B) Chandra Nalaar</div>
-                                <div className="text-gray-600 mt-2">• Difficulty levels: Easy (Level 1), Medium (Level 2), Hard (Level 3)</div>
-                                <div className="text-gray-600">• Explanations after "Explanation:" are optional</div>
-                                <div className="text-gray-600">• "Image:" tags are ignored</div>
-                                <div className="text-gray-600">• If no difficulty levels specified, questions will be randomly distributed across levels 1-3</div>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* JSON Format */}
-                          <div>
-                            <h4 className="font-medium text-gray-700 mb-2">JSON Format:</h4>
-                            <div className="bg-gray-50 p-4 rounded-lg text-sm font-mono">
-                              <div className="whitespace-pre-wrap">{`[
-  {
-    "question": "What is 2+2?",
-    "choices": ["2", "3", "4", "5"],
-    "correctAnswer": "4",
-    "level": 1,
-    "explanation": "Basic arithmetic"
-  },
-  {
-    "question": "What is the capital of France?",
-    "choices": ["London", "Berlin", "Paris", "Madrid"],
-    "correctAnswer": "Paris"
-  }
-]`}</div>
-                            </div>
-                            <p className="text-xs text-gray-600 mt-2">
-                              • If "level" is not specified, questions will be randomly assigned to levels 1-3<br/>
-                              • "explanation" field is optional<br/>
-                              • Can also paste a single object (without array brackets)
-                            </p>
+                        <h3 className="text-lg font-medium text-gray-900 mb-3">Text Format Requirements</h3>
+                        <div className="bg-gray-50 p-4 rounded-lg text-sm">
+                          <div className="font-medium mb-2">Expected Format:</div>
+                          <div className="font-mono space-y-1 text-xs">
+                            <div>Question 1 – (Easy)</div>
+                            <div>Who is known as the Firebrand?</div>
+                            <div>A) Liliana Vess  B) Chandra Nalaar  C) Jaya Ballard  D) Elspeth Tirel</div>
+                            <div>Answer: B) Chandra Nalaar</div>
+                            <div className="text-gray-600 mt-2">• Difficulty levels: Easy (Level 1), Medium (Level 2), Hard (Level 3)</div>
+                            <div className="text-gray-600">• Explanations after "Explanation:" are optional</div>
+                            <div className="text-gray-600">• "Image:" tags are ignored</div>
                           </div>
                         </div>
                       </div>
