@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import AdminLayout from '@/components/AdminLayout';
-import { ArrowLeft, Plus, Edit, Trash2, BookOpen, ChevronRight, Layers, Target, HelpCircle, Upload, FileText, AlertTriangle, Search } from 'lucide-react';
+import { ArrowLeft, Plus, Edit, Trash2, BookOpen, ChevronRight, Layers, Target, HelpCircle, Upload, FileText, AlertTriangle, Search, X } from 'lucide-react';
 import { Topic, Subtopic, Category, Question } from '@/types';
 import { topicsApi, subtopicsApi, categoriesApi, questionsApi, levelsApi } from '@/services/api';
 import toast from 'react-hot-toast';
@@ -24,6 +24,7 @@ export default function CategoryQuestionsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedLevel, setSelectedLevel] = useState('');
   const [levels, setLevels] = useState<number[]>([]);
+  const [levelsData, setLevelsData] = useState<any[]>([]);
   const [showBulkImportModal, setShowBulkImportModal] = useState(false);
   
   // Bulk import states
@@ -51,6 +52,19 @@ export default function CategoryQuestionsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [questionsPerPage] = useState(10);
   const [totalQuestions, setTotalQuestions] = useState(0);
+
+  // Create/Edit Modal states
+  const [showQuestionModal, setShowQuestionModal] = useState(false);
+  const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
+  const [questionForm, setQuestionForm] = useState({
+    question: '',
+    choices: ['', '', '', ''],
+    correctAnswer: '',
+    explanation: '',
+    levelId: '',
+    estimatedTime: 30,
+    isActive: true
+  });
 
   useEffect(() => {
     if (topicId && subtopicId && categoryId) {
@@ -124,6 +138,9 @@ export default function CategoryQuestionsPage() {
       const uniqueLevels = Array.from(new Set<number>(enhancedQuestions.map((q: Question) => q.level))).sort((a, b) => a - b);
       setLevels(uniqueLevels);
       
+      // Store levels data for modal
+      setLevelsData(levelsData?.data || levelsData?.items || []);
+      
     } catch (error: any) {
       console.error('Load data error:', error);
       toast.error('Failed to load data');
@@ -165,11 +182,114 @@ export default function CategoryQuestionsPage() {
   };
 
   const handleAddQuestion = () => {
-    router.push(`/topics/${topicId}/subtopics/${subtopicId}/categories/${categoryId}/questions/create`);
+    setEditingQuestion(null);
+    setQuestionForm({
+      question: '',
+      choices: ['', '', '', ''],
+      correctAnswer: '',
+      explanation: '',
+      levelId: '',
+      estimatedTime: 30,
+      isActive: true
+    });
+    setShowQuestionModal(true);
   };
 
-  const handleEditQuestion = (questionId: string) => {
-    router.push(`/topics/${topicId}/subtopics/${subtopicId}/categories/${categoryId}/questions/${questionId}/edit`);
+  const handleEditQuestion = async (questionId: string) => {
+    const question = questions.find(q => q.id === questionId);
+    if (question) {
+      setEditingQuestion(question);
+      setQuestionForm({
+        question: question.question || '',
+        choices: question.choices || question.options || ['', '', '', ''],
+        correctAnswer: question.correctAnswer || '',
+        explanation: question.explanation || '',
+        levelId: question.level_id || '',
+        estimatedTime: 30,
+        isActive: true
+      });
+      setShowQuestionModal(true);
+    } else {
+      toast.error('Question not found');
+    }
+  };
+
+  const handleFormChange = (field: string, value: any) => {
+    setQuestionForm(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handleChoiceChange = (index: number, value: string) => {
+    const newChoices = [...questionForm.choices];
+    newChoices[index] = value;
+    handleFormChange('choices', newChoices);
+  };
+
+  const handleSaveQuestion = async () => {
+    // Validation
+    if (!questionForm.question.trim()) {
+      toast.error('Question text is required');
+      return;
+    }
+
+    const validChoices = questionForm.choices.filter(choice => choice.trim());
+    if (validChoices.length < 2) {
+      toast.error('At least 2 choices are required');
+      return;
+    }
+
+    if (!questionForm.correctAnswer.trim()) {
+      toast.error('Correct answer is required');
+      return;
+    }
+
+    if (!questionForm.levelId) {
+      toast.error('Please select a level');
+      return;
+    }
+
+    if (!validChoices.includes(questionForm.correctAnswer)) {
+      toast.error('Correct answer must be one of the provided choices');
+      return;
+    }
+
+    try {
+      // Get the selected level information from the available levels data
+      const selectedLevel = levelsData.find(level => level.id === questionForm.levelId);
+      
+      const questionData = {
+        level_id: questionForm.levelId,
+        category_id: categoryId,
+        subtopic_id: subtopicId,
+        topic_id: topicId,
+        question: questionForm.question,
+        choices: validChoices,
+        correctAnswer: questionForm.correctAnswer,
+        explanation: questionForm.explanation,
+        difficulty: selectedLevel?.level || 1, // Use the level's number as difficulty
+        tags: [], // Add empty tags array
+        estimatedTime: questionForm.estimatedTime,
+        isActive: questionForm.isActive
+      };
+
+      if (editingQuestion) {
+        // Update existing question
+        await questionsApi.update(editingQuestion.id, questionData);
+        toast.success('Question updated successfully');
+      } else {
+        // Create new question
+        await questionsApi.create(questionData);
+        toast.success('Question created successfully');
+      }
+
+      setShowQuestionModal(false);
+      loadData(); // Reload the questions list
+    } catch (error: any) {
+      console.error('Save error:', error);
+      toast.error(`Failed to ${editingQuestion ? 'update' : 'create'} question`);
+    }
   };
 
   // Bulk import functions
@@ -311,16 +431,16 @@ export default function CategoryQuestionsPage() {
     try {
       const jsonData = JSON.parse(text.trim());
       if (Array.isArray(jsonData)) {
-        // If levels are not defined, randomly distribute across levels 1-3
+        // If levels are not defined, randomly distribute across all levels 1-10
         return jsonData.map(item => ({
           ...item,
-          level: item.level || Math.floor(Math.random() * 3) + 1
+          level: item.level || Math.floor(Math.random() * 10) + 1
         }));
       } else if (typeof jsonData === 'object') {
         // Single object, convert to array
         return [{
           ...jsonData,
-          level: jsonData.level || Math.floor(Math.random() * 3) + 1
+          level: jsonData.level || Math.floor(Math.random() * 10) + 1
         }];
       }
     } catch (error) {
@@ -628,7 +748,7 @@ export default function CategoryQuestionsPage() {
         const question = item.question || item.Question || '';
         const choicesString = item.choices || item.Choices || '';
         const correctAnswer = item.correctAnswer || item.CorrectAnswer || item.correct_answer || '';
-        const level = parseInt(item.level || item.Level || '1');
+        const level = parseInt(item.level || item.Level || '0'); // Use 0 to indicate no level specified
         const explanation = item.explanation || item.Explanation || '';
 
         if (!question || !correctAnswer) {
@@ -660,7 +780,7 @@ export default function CategoryQuestionsPage() {
           question: question.trim(),
           choices,
           correctAnswer: correctAnswer.trim(),
-          level: isNaN(level) ? 1 : level,
+          level: (isNaN(level) || level === 0) ? Math.floor(Math.random() * 10) + 1 : level, // Random level 1-10 if not specified
           explanation: explanation.trim(),
           topic_id: topicId,
           subtopic_id: subtopicId,
@@ -1298,10 +1418,10 @@ You can paste either:
                                 <div>Who is known as the Firebrand?</div>
                                 <div>A) Liliana Vess  B) Chandra Nalaar  C) Jaya Ballard  D) Elspeth Tirel</div>
                                 <div>Answer: B) Chandra Nalaar</div>
-                                <div className="text-gray-600 mt-2">• Difficulty levels: Easy (Level 1), Medium (Level 2), Hard (Level 3)</div>
+                                <div className="text-gray-600 mt-2">• Difficulty levels: Easy (Levels 1-3), Medium (Levels 4-7), Hard (Levels 8+)</div>
                                 <div className="text-gray-600">• Explanations after "Explanation:" are optional</div>
                                 <div className="text-gray-600">• "Image:" tags are ignored</div>
-                                <div className="text-gray-600">• If no difficulty levels specified, questions will be randomly distributed across levels 1-3</div>
+                                <div className="text-gray-600">• If no difficulty levels specified, questions will be randomly distributed across all levels</div>
                               </div>
                             </div>
                           </div>
@@ -1326,7 +1446,8 @@ You can paste either:
 ]`}</div>
                             </div>
                             <p className="text-xs text-gray-600 mt-2">
-                              • If "level" is not specified, questions will be randomly assigned to levels 1-3<br/>
+                              • Level ranges: 1-3 (Easy), 4-7 (Medium), 8+ (Hard)<br/>
+                              • If "level" is not specified, questions will be randomly assigned across all levels<br/>
                               • "explanation" field is optional<br/>
                               • Can also paste a single object (without array brackets)
                             </p>
@@ -1445,6 +1566,135 @@ You can paste either:
                     </button>
                   </div>
                 )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Question Create/Edit Modal */}
+      {showQuestionModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-gray-900">
+                {editingQuestion ? 'Edit Question' : 'Create Question'}
+              </h2>
+              <button
+                onClick={() => setShowQuestionModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              {/* Question Text */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Question *
+                </label>
+                <textarea
+                  value={questionForm.question}
+                  onChange={(e) => handleFormChange('question', e.target.value)}
+                  rows={3}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Enter your question here..."
+                />
+              </div>
+
+              {/* Choices */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Answer Choices *
+                </label>
+                <div className="space-y-3">
+                  {questionForm.choices.map((choice, index) => (
+                    <div key={index} className="flex items-center space-x-3">
+                      <span className="text-sm font-medium text-gray-500 w-8">
+                        {String.fromCharCode(65 + index)}.
+                      </span>
+                      <input
+                        type="text"
+                        value={choice}
+                        onChange={(e) => handleChoiceChange(index, e.target.value)}
+                        className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder={`Choice ${String.fromCharCode(65 + index)}`}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Correct Answer */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Correct Answer *
+                </label>
+                <select
+                  value={questionForm.correctAnswer}
+                  onChange={(e) => handleFormChange('correctAnswer', e.target.value)}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="">Select the correct answer</option>
+                  {questionForm.choices
+                    .filter(choice => choice.trim())
+                    .map((choice, index) => (
+                      <option key={index} value={choice}>
+                        {String.fromCharCode(65 + index)}. {choice}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              {/* Explanation */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Explanation (Optional)
+                </label>
+                <textarea
+                  value={questionForm.explanation}
+                  onChange={(e) => handleFormChange('explanation', e.target.value)}
+                  rows={2}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Provide an explanation for the correct answer..."
+                />
+              </div>
+
+              {/* Level Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Level *
+                </label>
+                <select
+                  value={questionForm.levelId}
+                  onChange={(e) => handleFormChange('levelId', e.target.value)}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  required
+                >
+                  <option value="">Select a level</option>
+                  {levelsData.map(level => (
+                    <option key={level.id} value={level.id}>
+                      Level {level.level} - {level.name || `${level.totalQuestions || 0} questions`} - {level.level <= 3 ? 'Easy' : level.level <= 7 ? 'Medium' : 'Hard'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end space-x-4 pt-6 border-t border-gray-200">
+                <button
+                  onClick={() => setShowQuestionModal(false)}
+                  className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveQuestion}
+                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                >
+                  {editingQuestion ? 'Update Question' : 'Create Question'}
+                </button>
               </div>
             </div>
           </div>
