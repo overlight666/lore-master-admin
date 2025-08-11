@@ -56,15 +56,16 @@ export default function CategoryQuestionsPage() {
     if (topicId && subtopicId && categoryId) {
       loadData();
     }
-  }, [topicId, subtopicId, categoryId, currentPage]);
+  }, [topicId, subtopicId, categoryId]); // Removed currentPage from dependencies
 
   useEffect(() => {
     filterQuestions();
-    // Reset to first page when filters change
-    if (currentPage > 1) {
-      setCurrentPage(1);
-    }
   }, [questions, searchTerm, selectedLevel]);
+
+  // Separate useEffect to reset pagination only when filters change (not questions)  
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedLevel]);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -77,8 +78,7 @@ export default function CategoryQuestionsPage() {
           topicId, 
           subtopicId, 
           categoryId, 
-          page: currentPage,
-          limit: questionsPerPage
+          limit: 1000 // Load all questions at once for frontend pagination
         }),
         levelsApi.getAll({ category_id: categoryId, limit: 100 })
       ]);
@@ -118,7 +118,7 @@ export default function CategoryQuestionsPage() {
       }));
       
       setQuestions(enhancedQuestions);
-      setTotalQuestions(total);
+      setTotalQuestions(enhancedQuestions.length); // Set total based on all questions initially
       
       // Extract unique levels from questions
       const uniqueLevels = Array.from(new Set<number>(enhancedQuestions.map((q: Question) => q.level))).sort((a, b) => a - b);
@@ -147,6 +147,7 @@ export default function CategoryQuestionsPage() {
     }
 
     setFilteredQuestions(filtered);
+    setTotalQuestions(filtered.length); // Update total based on filtered results
   };
 
   const handleDeleteQuestion = async (questionId: string) => {
@@ -356,11 +357,19 @@ export default function CategoryQuestionsPage() {
         let level = 1;
         if (questionMatchWithDifficulty) {
           const difficulty = questionMatchWithDifficulty[1].toLowerCase();
-          if (difficulty === 'medium') level = 2;
-          else if (difficulty === 'hard') level = 3;
+          if (difficulty === 'easy') {
+            // Level 1-3 for easy
+            level = Math.floor(Math.random() * 3) + 1;
+          } else if (difficulty === 'medium') {
+            // Level 4-7 for medium  
+            level = Math.floor(Math.random() * 4) + 4;
+          } else if (difficulty === 'hard') {
+            // Level 8+ for hard (8-10 range)
+            level = Math.floor(Math.random() * 3) + 8;
+          }
         } else if (!hasDefinedLevels) {
-          // If no levels are defined in the entire text, randomly assign
-          level = Math.floor(Math.random() * 3) + 1;
+          // If no levels are defined in the entire text, randomly assign across all levels
+          level = Math.floor(Math.random() * 10) + 1;
         }
         
         currentQuestion = {
@@ -913,21 +922,24 @@ export default function CategoryQuestionsPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                {filteredQuestions.map((question, index) => (
+                {filteredQuestions
+                  .slice((currentPage - 1) * questionsPerPage, currentPage * questionsPerPage)
+                  .map((question, index) => {
+                    const globalIndex = (currentPage - 1) * questionsPerPage + index + 1;
+                    return (
                   <div key={question.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="flex items-center mb-2">
                           <span className="text-sm font-medium text-gray-500 mr-3">
-                            Question {index + 1}
+                            Question {globalIndex}
                           </span>
                           <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                             question.level <= 3 ? 'bg-green-100 text-green-800' :
-                            question.level <= 6 ? 'bg-yellow-100 text-yellow-800' :
-                            question.level <= 8 ? 'bg-orange-100 text-orange-800' :
+                            question.level <= 7 ? 'bg-yellow-100 text-yellow-800' :
                             'bg-red-100 text-red-800'
                           }`}>
-                            Level {question.level}
+                            Level {question.level} ({question.level <= 3 ? 'Easy' : question.level <= 7 ? 'Medium' : 'Hard'})
                           </span>
                         </div>
                         <h3 className="text-lg font-medium text-gray-900 mb-3">
@@ -975,7 +987,8 @@ export default function CategoryQuestionsPage() {
                       </div>
                     </div>
                   </div>
-                ))}
+                    );
+                  })}
               </div>
             )}
 
