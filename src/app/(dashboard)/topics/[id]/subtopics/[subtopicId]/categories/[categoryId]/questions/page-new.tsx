@@ -58,7 +58,7 @@ export default function CategoryQuestionsPage() {
         topicsApi.getById(topicId),
         subtopicsApi.getById(subtopicId),
         categoriesApi.getById(categoryId),
-        questionsApi.getAll({ topicId, subtopicId, categoryId, limit: 1000 })
+        questionsApi.getAll({ topicId, subtopicId, categoryId, page: 1, limit: 20 })
       ]);
       
       // Handle data responses

@@ -36,7 +36,7 @@ export default function QuestionsPage() {
   const searchParams = useSearchParams();
   const urlTopic = searchParams?.get('topic');
   const urlSubtopic = searchParams?.get('subtopic');
-  const urlCategory = searchParams?.get('category');
+  const urlCategory = searchParams?.get('category') || searchParams?.get('categoryId');
   
   const [questions, setQuestions] = useState<Question[]>([]);
   // Pagination state
@@ -135,7 +135,7 @@ export default function QuestionsPage() {
       await loadQuestions();
       
       // Load topics
-      const topicsResponse = await apiService.get('/admin/topics?limit=1000');
+      const topicsResponse = await apiService.get('/admin/topics?limit=100');
       
       // Ensure topics is always an array
       let topicsData = [];

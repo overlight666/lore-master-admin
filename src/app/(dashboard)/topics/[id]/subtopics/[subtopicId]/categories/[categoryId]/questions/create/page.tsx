@@ -137,7 +137,8 @@ export default function CreateQuestionPage() {
         topicId, 
         subtopicId, 
         categoryId, 
-        limit: 1000 
+        page: 1,
+        limit: 1000  // For duplication checking, we might need all questions
       });
       
       let questionsArray: any[] = [];

@@ -142,7 +142,8 @@ export default function CategoryQuestionsPage() {
             topicId, 
             subtopicId, 
             categoryId, 
-            limit: 1000
+            page: 1,
+            limit: 20
           }),
           levelsApi.getAll({ category_id: categoryId, limit: 100 })
         ]);
@@ -389,7 +390,8 @@ export default function CategoryQuestionsPage() {
         topicId, 
         subtopicId, 
         categoryId, 
-        limit: 1000 
+        page: 1,
+        limit: 1000  // For duplication checking, we might need all questions
       });
       
       let existingQuestions: any[] = [];
@@ -669,7 +671,8 @@ export default function CategoryQuestionsPage() {
         topicId, 
         subtopicId, 
         categoryId, 
-        limit: 1000 
+        page: 1,
+        limit: 1000  // For duplication checking, we might need all questions
       });
       
       let existingQuestions: any[] = [];
