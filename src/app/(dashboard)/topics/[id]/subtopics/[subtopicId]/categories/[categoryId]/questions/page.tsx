@@ -6,6 +6,7 @@ import AdminLayout from '@/components/AdminLayout';
 import { ArrowLeft, Plus, Edit, Trash2, BookOpen, ChevronRight, Layers, Target, HelpCircle, Upload, FileText, AlertTriangle, Search, X } from 'lucide-react';
 import { Topic, Subtopic, Category, Question } from '@/types';
 import { topicsApi, subtopicsApi, categoriesApi, questionsApi, levelsApi } from '@/services/api';
+import { auth } from '@/lib/firebase';
 import toast from 'react-hot-toast';
 
 export default function CategoryQuestionsPage() {
@@ -21,6 +22,7 @@ export default function CategoryQuestionsPage() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [filteredQuestions, setFilteredQuestions] = useState<Question[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadingStep, setLoadingStep] = useState('Initializing...');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedLevel, setSelectedLevel] = useState('');
   const [levels, setLevels] = useState<number[]>([]);
@@ -68,7 +70,34 @@ export default function CategoryQuestionsPage() {
 
   useEffect(() => {
     if (topicId && subtopicId && categoryId) {
-      loadData();
+      // Check if user is authenticated
+      const checkAuth = async () => {
+        const user = auth?.currentUser;
+        console.log('Current user:', user?.email || 'No user');
+        if (user) {
+          const token = await user.getIdToken();
+          console.log('User token exists:', !!token);
+        }
+      };
+      checkAuth();
+      
+      // Set a timeout to catch hanging loading states
+      const loadingTimeout = setTimeout(() => {
+        console.error('Loading timeout - data taking too long to load');
+        if (isLoading) { // Only show error if still loading
+          setIsLoading(false);
+          toast.error('Loading is taking longer than expected. Please refresh the page.');
+        }
+      }, 30000); // Increased to 30 seconds
+      
+      loadData().finally(() => {
+        clearTimeout(loadingTimeout);
+      });
+
+      // Cleanup timeout on unmount
+      return () => {
+        clearTimeout(loadingTimeout);
+      };
     }
   }, [topicId, subtopicId, categoryId]); // Removed currentPage from dependencies
 
@@ -84,23 +113,58 @@ export default function CategoryQuestionsPage() {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [topicData, subtopicData, categoryData, questionsData, levelsData] = await Promise.all([
+      setLoadingStep('Loading basic information...');
+      console.log('Loading data for:', { topicId, subtopicId, categoryId });
+      
+      // Load basic information first (these are usually faster)
+      const [topicData, subtopicData, categoryData] = await Promise.all([
         topicsApi.getById(topicId),
         subtopicsApi.getById(subtopicId),
-        categoriesApi.getById(categoryId),
-        questionsApi.getAll({ 
-          topicId, 
-          subtopicId, 
-          categoryId, 
-          limit: 1000 // Load all questions at once for frontend pagination
-        }),
-        levelsApi.getAll({ category_id: categoryId, limit: 100 })
+        categoriesApi.getById(categoryId)
       ]);
-      
-      // Handle data responses
+
+      // Set the basic data immediately so breadcrumbs show
       setTopic(topicData);
-      setSubtopic(subtopicData);
+      setSubtopic(subtopicData);  
       setCategory(categoryData);
+      
+      // Load questions and levels data (this may take longer for large datasets)
+      setLoadingStep('Loading questions and levels...');
+      console.log('Loading questions and levels...');
+      
+      // Try to load questions and levels, but handle errors gracefully
+      let questionsData: any = [];
+      let levelsData: any = [];
+      
+      try {
+        const [questionResponse, levelResponse] = await Promise.all([
+          questionsApi.getAll({ 
+            topicId, 
+            subtopicId, 
+            categoryId, 
+            limit: 1000
+          }),
+          levelsApi.getAll({ category_id: categoryId, limit: 100 })
+        ]);
+        questionsData = questionResponse;
+        levelsData = levelResponse;
+        console.log('Questions and levels loaded successfully');
+      } catch (apiError: any) {
+        console.error('API Error loading questions/levels:', apiError);
+        
+        // Show specific error message
+        if (apiError.response?.status === 500) {
+          toast.error('Server error loading questions. The backend may need attention.');
+        } else {
+          toast.error('Failed to load questions data');
+        }
+        
+        // Set empty data but don't throw - let the page load with empty state
+        questionsData = { data: [], items: [], total: 0 };
+        levelsData = { data: [], items: [], total: 0 };
+      }
+
+      setLoadingStep('Processing questions data...');
       
       // Handle questions data using our consistent data extraction
       let questionsArray: Question[] = [];
@@ -116,6 +180,9 @@ export default function CategoryQuestionsPage() {
         questionsArray = questionsData;
         total = questionsData.length;
       }
+
+      console.log('Questions array:', questionsArray);
+      console.log('Total:', total);
       
       // Create a map of level_id to level number
       const levelsMap = new Map();
@@ -140,6 +207,8 @@ export default function CategoryQuestionsPage() {
       
       // Store levels data for modal
       setLevelsData(levelsData?.data || levelsData?.items || []);
+      
+      console.log(`Loaded ${enhancedQuestions.length} questions successfully`);
       
     } catch (error: any) {
       console.error('Load data error:', error);
@@ -882,9 +951,32 @@ export default function CategoryQuestionsPage() {
   if (isLoading) {
     return (
       <AdminLayout>
-        <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-gray-200 rounded w-1/4"></div>
-          <div className="h-32 bg-gray-200 rounded"></div>
+        <div className="p-6">
+          <div className="max-w-7xl mx-auto">
+            <div className="bg-white p-4 rounded-lg border">
+              <div className="flex items-center text-sm text-gray-600">
+                <BookOpen className="h-4 w-4 mr-2" />
+                <span className="font-medium text-gray-900">{topic?.name || 'Loading topic...'}</span>
+                <ChevronRight className="h-4 w-4 mx-2" />
+                <span className="font-medium text-gray-900">{subtopic?.name || 'Loading subtopic...'}</span>
+                <ChevronRight className="h-4 w-4 mx-2" />
+                <Layers className="h-4 w-4 mr-1" />
+                <span className="font-medium text-gray-900">{category?.name || 'Loading category...'}</span>
+                <ChevronRight className="h-4 w-4 mx-2" />
+                <HelpCircle className="h-4 w-4 mr-1" />
+                <span>Questions</span>
+              </div>
+            </div>
+            <div className="mt-6 bg-white p-8 rounded-lg border">
+              <div className="flex items-center justify-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mr-3"></div>
+                <span className="text-gray-600">{loadingStep}</span>
+              </div>
+              <p className="text-center text-sm text-gray-500 mt-2">
+                Loading large datasets may take a moment. Please wait...
+              </p>
+            </div>
+          </div>
         </div>
       </AdminLayout>
     );
