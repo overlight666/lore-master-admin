@@ -75,8 +75,17 @@ export default function QuestionsPage() {
 
   useEffect(() => {
     setCurrentPage(1); // Reset to first page when filters change
+  }, [selectedTopic, selectedSubtopic, selectedCategory, selectedLevel, debouncedSearchTerm, pageSize]);
+
+  // Load data when page changes or filters change
+  useEffect(() => {
+    loadQuestions();
+  }, [currentPage, selectedTopic, selectedSubtopic, selectedCategory, selectedLevel, debouncedSearchTerm, pageSize]);
+
+  // Load initial data (topics, categories, etc.) on mount
+  useEffect(() => {
     loadData();
-  }, [selectedTopic, selectedSubtopic, selectedCategory, selectedLevel, debouncedSearchTerm, currentPage, pageSize]);
+  }, []);
 
   // Reset selected level when category changes
   useEffect(() => {
@@ -98,14 +107,32 @@ export default function QuestionsPage() {
       
       const response = await apiService.get(`/admin/questions?${params.toString()}`);
       
+      console.log('🔍 Debug pagination response:', {
+        response,
+        items: response?.items?.length,
+        total: response?.total,
+        totalPages: response?.totalPages,
+        pageSize,
+        calculatedPages: response?.total ? Math.ceil(response.total / pageSize) : 0
+      });
+      
       // Handle response structure
       const questionsData = response?.items || response?.data || response || [];
-      const total = response?.total || questionsData.length;
-      const totalPagesResponse = response?.totalPages || Math.ceil(total / pageSize);
+      const total = typeof response?.total === 'number' ? response.total : questionsData.length;
+      const totalPagesResponse = typeof response?.totalPages === 'number' ? response.totalPages : Math.ceil(total / pageSize);
       
       setQuestions(Array.isArray(questionsData) ? questionsData : []);
       setTotalQuestions(total);
       setTotalPages(totalPagesResponse);
+      
+      console.log('🎯 Debug pagination state:', {
+        questionsLength: Array.isArray(questionsData) ? questionsData.length : 0,
+        totalQuestions: total,
+        totalPages: totalPagesResponse,
+        currentPage: page,
+        pageSize,
+        shouldShowPagination: Array.isArray(questionsData) && questionsData.length > 0 && totalPagesResponse > 1
+      });
       
       // Group questions by difficulty (using level property)
       const groupedByDifficulty = questionsData.reduce((acc: {[key: string]: Question[]}, question: Question) => {
@@ -131,9 +158,6 @@ export default function QuestionsPage() {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      // Load questions with pagination
-      await loadQuestions();
-      
       // Load topics
       const topicsResponse = await apiService.get('/admin/topics?limit=100');
       
@@ -616,8 +640,15 @@ export default function QuestionsPage() {
               </>
             )}
 
+            {/* Debug Info */}
+            <div className="bg-yellow-100 p-4 rounded-lg mb-4">
+              <p className="text-sm">
+                Debug: Questions: {questions.length}, Total: {totalQuestions}, Pages: {totalPages}, Current: {currentPage}
+              </p>
+            </div>
+
             {/* Pagination Controls */}
-            {questions.length > 0 && totalPages > 1 && (
+            {questions.length > 0 && (
               <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
                 <div className="flex-1 flex justify-between sm:hidden">
                   <button

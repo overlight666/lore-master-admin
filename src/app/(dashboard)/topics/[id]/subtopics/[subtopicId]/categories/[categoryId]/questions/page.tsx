@@ -27,6 +27,7 @@ export default function CategoryQuestionsPage() {
   const [selectedLevel, setSelectedLevel] = useState('');
   const [levels, setLevels] = useState<number[]>([]);
   const [levelsData, setLevelsData] = useState<any[]>([]);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [showBulkImportModal, setShowBulkImportModal] = useState(false);
   
   // Bulk import states
@@ -52,7 +53,7 @@ export default function CategoryQuestionsPage() {
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
-  const [questionsPerPage] = useState(10);
+  const [questionsPerPage, setQuestionsPerPage] = useState(20);
   const [totalQuestions, setTotalQuestions] = useState(0);
 
   // Create/Edit Modal states
@@ -92,6 +93,7 @@ export default function CategoryQuestionsPage() {
       
       loadData().finally(() => {
         clearTimeout(loadingTimeout);
+        setIsInitialLoad(false);
       });
 
       // Cleanup timeout on unmount
@@ -101,6 +103,13 @@ export default function CategoryQuestionsPage() {
     }
   }, [topicId, subtopicId, categoryId]); // Removed currentPage from dependencies
 
+  // Load data when page changes or page size changes (server-side pagination)
+  useEffect(() => {
+    if (topicId && subtopicId && categoryId && !isInitialLoad) {
+      loadData();
+    }
+  }, [currentPage, questionsPerPage]);
+
   useEffect(() => {
     filterQuestions();
   }, [questions, searchTerm, selectedLevel]);
@@ -108,7 +117,7 @@ export default function CategoryQuestionsPage() {
   // Separate useEffect to reset pagination only when filters change (not questions)  
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedLevel]);
+  }, [searchTerm, selectedLevel, questionsPerPage]);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -142,14 +151,22 @@ export default function CategoryQuestionsPage() {
             topicId, 
             subtopicId, 
             categoryId, 
-            page: 1,
-            limit: 20
+            page: currentPage,
+            limit: questionsPerPage
           }),
           levelsApi.getAll({ category_id: categoryId, limit: 100 })
         ]);
         questionsData = questionResponse;
         levelsData = levelResponse;
         console.log('Questions and levels loaded successfully');
+        console.log('🔍 API Response:', {
+          questionsData,
+          items: questionsData?.items?.length,
+          total: questionsData?.total,
+          totalPages: questionsData?.totalPages,
+          page: questionsData?.page,
+          limit: questionsData?.limit
+        });
       } catch (apiError: any) {
         console.error('API Error loading questions/levels:', apiError);
         
@@ -200,7 +217,7 @@ export default function CategoryQuestionsPage() {
       }));
       
       setQuestions(enhancedQuestions);
-      setTotalQuestions(enhancedQuestions.length); // Set total based on all questions initially
+      setTotalQuestions(total); // Use the actual total from API response, not just current page length
       
       // Extract unique levels from questions
       const uniqueLevels = Array.from(new Set<number>(enhancedQuestions.map((q: Question) => q.level))).sort((a, b) => a - b);
@@ -234,7 +251,7 @@ export default function CategoryQuestionsPage() {
     }
 
     setFilteredQuestions(filtered);
-    setTotalQuestions(filtered.length); // Update total based on filtered results
+    // Don't update totalQuestions here - it should reflect the server total, not filtered count
   };
 
   const handleDeleteQuestion = async (questionId: string) => {
@@ -1137,9 +1154,7 @@ export default function CategoryQuestionsPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                {filteredQuestions
-                  .slice((currentPage - 1) * questionsPerPage, currentPage * questionsPerPage)
-                  .map((question, index) => {
+                {filteredQuestions.map((question, index) => {
                     const globalIndex = (currentPage - 1) * questionsPerPage + index + 1;
                     return (
                   <div key={question.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
@@ -1207,13 +1222,33 @@ export default function CategoryQuestionsPage() {
               </div>
             )}
 
-            {/* Pagination Controls */}
+            {/* Pagination Controls - Show if there are more total questions than per page, regardless of current filtering */}
             {!isLoading && totalQuestions > questionsPerPage && (
               <div className="px-6 py-4 border-t border-gray-200">
                 <div className="flex items-center justify-between">
-                  <div className="text-sm text-gray-700">
-                    Showing {Math.min((currentPage - 1) * questionsPerPage + 1, totalQuestions)} to{' '}
-                    {Math.min(currentPage * questionsPerPage, totalQuestions)} of {totalQuestions} results
+                  <div className="flex items-center space-x-4">
+                    <div className="text-sm text-gray-700">
+                      Showing {Math.min((currentPage - 1) * questionsPerPage + 1, Math.min(totalQuestions, filteredQuestions.length))} to{' '}
+                      {Math.min(currentPage * questionsPerPage, Math.min(totalQuestions, (currentPage - 1) * questionsPerPage + filteredQuestions.length))} of {totalQuestions} results
+                      {(searchTerm || selectedLevel) && (
+                        <span className="text-gray-500"> (filtered from page {currentPage})</span>
+                      )}
+                    </div>
+                    
+                    {/* Page Size Selector */}
+                    <div className="flex items-center space-x-2">
+                      <label className="text-sm text-gray-700">Show:</label>
+                      <select
+                        value={questionsPerPage}
+                        onChange={(e) => setQuestionsPerPage(Number(e.target.value))}
+                        className="border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value={20}>20</option>
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                      </select>
+                      <label className="text-sm text-gray-700">per page</label>
+                    </div>
                   </div>
                   <div className="flex items-center space-x-2">
                     <button
